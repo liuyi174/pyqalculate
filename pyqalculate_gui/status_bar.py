@@ -1,0 +1,54 @@
+"""Status bar widget showing calculator stats and mode."""
+
+import tkinter as tk
+from tkinter import ttk
+
+from pyqalculate_gui.event_bus import MODE_CHANGED, EventBus
+from pyqalculate_gui.theme import LIGHT, Theme
+
+
+class StatusBar(ttk.Frame):
+    """Status bar displaying statistics and current calculation mode."""
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        theme: Theme = LIGHT,
+        event_bus: EventBus | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._theme = theme
+        self._event_bus = event_bus
+
+        if self._event_bus:
+            self._event_bus.subscribe(MODE_CHANGED, self._on_mode_changed)
+
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        """Build the status bar."""
+        self._stats_var = tk.StringVar(
+            value="Functions: 0 | Units: 0 | Variables: 0"
+        )
+        ttk.Label(
+            self, textvariable=self._stats_var, font=self._theme.info_font
+        ).pack(side=tk.LEFT, padx=10)
+
+        self._mode_var = tk.StringVar(value="Approximate")
+        ttk.Label(
+            self, textvariable=self._mode_var, font=self._theme.info_font
+        ).pack(side=tk.RIGHT, padx=10)
+
+    def _on_mode_changed(self, exact: bool) -> None:
+        """Handle mode change."""
+        self.set_mode(exact)
+
+    def update_stats(self, n_funcs: int, n_units: int, n_vars: int) -> None:
+        """Update statistics display."""
+        self._stats_var.set(
+            f"Functions: {n_funcs} | Units: {n_units} | Variables: {n_vars}"
+        )
+
+    def set_mode(self, exact: bool) -> None:
+        """Set mode display."""
+        self._mode_var.set("Exact" if exact else "Approximate")
