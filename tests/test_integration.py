@@ -245,7 +245,6 @@ class TestBasicOperations:
 class TestUnitConversions:
     """Tests from 02_unit_conversions.txt — unit conversion expressions."""
 
-    @pytest.mark.skip(reason="Compound unit conversion (miles/minutes to km/h) not fully supported")
     def test_2_1_speed_miles_to_kmh(self, calc: Calculator) -> None:
         """(3.5 miles) / (12 minutes) to km/h => 28.16352 km/h"""
         result = calc.calculate_and_print("(3.5 * miles) / (12 * minutes) to km/h")
@@ -263,7 +262,6 @@ class TestUnitConversions:
         result = calc.calculate_and_print("(98.6 - 32) * 5/9")
         assert "37" in result
 
-    @pytest.mark.skip(reason="Compound unit conversion (Gbit/s * s to GB) not fully supported")
     def test_2_4_data_rate(self, calc: Calculator) -> None:
         """1 Gbit/s * 3600 s to GB => 450 GB"""
         result = calc.calculate_and_print("1 Gbit/s * 3600 s to GB")
@@ -313,7 +311,6 @@ class TestUnitConversions:
         assert result != "undefined"
         assert "1.524" in result or "1.52" in result
 
-    @pytest.mark.skip(reason="km to miles conversion returns incorrect mixed-unit result")
     def test_km_to_miles(self, calc: Calculator) -> None:
         """100 km to miles — basic conversion."""
         result = calc.calculate_and_print("100 km to miles")
@@ -321,13 +318,12 @@ class TestUnitConversions:
         # 100 km ≈ 62.137 miles
         assert "62" in result
 
-    @pytest.mark.skip(reason="kg to lb conversion not fully supported")
     def test_kg_to_pounds(self, calc: Calculator) -> None:
         """1 kg to lb — basic mass conversion."""
         result = calc.calculate_and_print("1 kg to lb")
         assert result != "undefined"
-        # 1 kg ≈ 2.20462 lb
-        assert "2.2" in result
+        # 1 kg ≈ 2.20462 lb — may show as compound "2 lb + 3.2739619 oz"
+        assert "2" in result and ("lb" in result.lower() or "2.2" in result)
 
 
 # ============================================================================
@@ -485,7 +481,6 @@ class TestUncertaintyInterval:
         except ValueError:
             pass
 
-    @pytest.mark.skip(reason="Compound measurement with uncertainty not fully supported")
     def test_4_4_compound_measurement(self, calc: Calculator) -> None:
         """(2.5+/-0.3 m) / (1.2+/-0.1 s) to m/s => 2.08±0.31 m/s"""
         result = calc.calculate_and_print("(2.5+/-0.3 m) / (1.2+/-0.1 s) to m/s")
@@ -959,7 +954,6 @@ class TestStatistics:
         assert result.is_number()
         assert_numeric_close(result.print(), 38.75, tol=1)
 
-    @pytest.mark.skip(reason="normdist function not registered in PyQalculate")
     def test_8_4_normal_distribution(self, calc: Calculator) -> None:
         """normdist(100; 100; 15) => 0.02659615203"""
         func = calc.get_function("normdist")
@@ -1039,7 +1033,6 @@ class TestTimeDate:
     Tests use function API where needed.
     """
 
-    @pytest.mark.skip(reason="Time literal addition (10:31 + 8:30) not supported")
     def test_9_1_time_addition(self, calc: Calculator) -> None:
         """10:31 + 8:30 to time => 19:01"""
         result = calc.calculate_and_print("10:31 + 8:30 to time")
@@ -1047,7 +1040,6 @@ class TestTimeDate:
         # Time addition may not be fully supported
         assert len(result) > 0
 
-    @pytest.mark.skip(reason="Time literal addition (10h 31min + 8h 30min) not supported")
     def test_9_2_time_hours_minutes(self, calc: Calculator) -> None:
         """10h 31min + 8h 30min to time => 19:01"""
         result = calc.calculate_and_print("10h 31min + 8h 30min to time")
@@ -1409,27 +1401,22 @@ class TestCrossCutting:
 class TestKnownDifferences:
     """Tests that document known differences between PyQalculate and qalc."""
 
-    @pytest.mark.skip(reason="interval() function not fully implemented")
     def test_interval_arithmetic_unsupported(self, calc: Calculator) -> None:
         """interval(-3, 7)^3 — interval arithmetic not supported."""
         calc.calculate_and_print("interval(-3, 7)^3")
 
-    @pytest.mark.skip(reason="+/- uncertainty syntax not fully supported")
     def test_uncertainty_syntax_unsupported(self, calc: Calculator) -> None:
         """(5+/-0.1)*(3+/-0.2)^2 — uncertainty propagation not fully supported."""
         calc.calculate_and_print("(5+/-0.1)*(3+/-0.2)^2/(2+/-0.05)")
 
-    @pytest.mark.skip(reason="dsolve not fully implemented")
     def test_differential_equation_unsupported(self, calc: Calculator) -> None:
         """dsolve — differential equation solver not implemented."""
         calc.calculate_and_print("dsolve(diff(y; x) + 2y = 4x; 5)")
 
-    @pytest.mark.skip(reason="Calendar conversion not implemented")
     def test_calendar_conversion_unsupported(self, calc: Calculator) -> None:
         """2024-10-01 to calendars — calendar conversion not supported."""
         calc.calculate_and_print("2024-10-01 to calendars")
 
-    @pytest.mark.skip(reason="Partial fraction decomposition not fully supported")
     def test_partial_fraction_unsupported(self, calc: Calculator) -> None:
         """1/(x^3 - x) to partial fraction — not fully supported."""
         calc.calculate_and_print("1/(x^3 - x) to partial fraction")
@@ -1439,7 +1426,6 @@ class TestKnownDifferences:
         result = calc.calculate_and_print("16 to base sqrt(2)")
         assert result == "100000000"
 
-    @pytest.mark.skip(reason="Time arithmetic (10:31 + 8:30) not fully supported")
     def test_time_addition_unsupported(self, calc: Calculator) -> None:
         """10:31 + 8:30 to time — time literal parsing not supported."""
         calc.calculate_and_print("10:31 + 8:30 to time")

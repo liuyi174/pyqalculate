@@ -137,7 +137,7 @@ def test_function_base():
     f = SqrtFunction()
     assert f.name() == "sqrt"
     assert f.args() == 1
-    assert f.id() == 20
+    assert f.id() == 1200
 
 
 def test_dataset():

@@ -171,7 +171,7 @@ class TestBaseConversion:
     def test_binary_base(self, capsys: pytest.CaptureFixture[str]) -> None:
         main(["-t", "-b", "2", "42"])
         captured = capsys.readouterr()
-        assert "101010" in captured.out
+        assert "101010" in captured.out.replace(" ", "")
 
     def test_octal_base(self, capsys: pytest.CaptureFixture[str]) -> None:
         main(["-t", "-b", "8", "42"])
