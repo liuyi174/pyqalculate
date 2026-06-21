@@ -22,6 +22,18 @@ class CalculationResult:
     error: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class FunctionInfo:
+    """Metadata for a single mathematical function."""
+
+    name: str
+    title: str
+    description: str
+    category: str
+    min_args: int
+    max_args: int
+
+
 class CalculatorService:
     """Thin wrapper around pyqalculate.Calculator with typed error handling."""
 
@@ -144,3 +156,17 @@ class CalculatorService:
     def get_variable(self, name: str):
         """Get a variable by name, or None if not found."""
         return self._calc.get_variable(name)
+
+    def get_function_info(self, name: str) -> FunctionInfo | None:
+        """Return metadata for *name*, or ``None`` if not found."""
+        func = self._calc.get_function(name)
+        if func is None:
+            return None
+        return FunctionInfo(
+            name=func.name(),
+            title=func.title(),
+            description=func.description(),
+            category=func.category(),
+            min_args=func.min_args(),
+            max_args=func.max_args(),
+        )

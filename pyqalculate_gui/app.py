@@ -12,11 +12,13 @@ from tkinter import ttk
 
 from pyqalculate_gui.autocomplete import AutoComplete
 from pyqalculate_gui.calculator_service import CalculatorService
+from pyqalculate_gui.dialogs.functions_list import FunctionsListDialog
 from pyqalculate_gui.event_bus import (
     CLEAR_ALL,
     COPY_RESULT,
     EXPRESSION_SUBMITTED,
     HISTORY_RECALLED,
+    OPEN_NUMBER_BASES,
     OPEN_PLOT,
     OPEN_PREFERENCES,
     PREFERENCE_APPLIED,
@@ -181,6 +183,7 @@ class App:
         bus.subscribe("keypad_backspace", self._on_backspace)
         bus.subscribe("keypad_negate", self._on_negate)
         bus.subscribe(CLEAR_ALL, self._on_clear_all)
+        bus.subscribe(OPEN_NUMBER_BASES, self._open_number_bases)
         bus.subscribe(OPEN_PREFERENCES, self._on_open_preferences)
         bus.subscribe(OPEN_PLOT, self._on_open_plot)
         bus.subscribe(COPY_RESULT, self._on_copy_result)
@@ -189,6 +192,7 @@ class App:
         bus.subscribe(TOGGLE_KEYPAD, self._on_toggle_keypad)
         bus.subscribe(TOGGLE_HISTORY, self._on_toggle_history)
         bus.subscribe(RESULT_DISPLAYED, self._on_result_displayed)
+        bus.subscribe("open_manage_functions", lambda: self._open_manage_functions())
 
     # ------------------------------------------------------------------
     # Keyboard shortcuts
@@ -369,7 +373,15 @@ class App:
 
     def _open_number_bases(self) -> None:
         """Open number base conversion dialog."""
-        self._event_bus.emit("open_number_bases")
+        from pyqalculate_gui.dialogs.number_bases import NumberBasesDialog
+
+        initial = self._result_view.get_last_result() or ""
+        NumberBasesDialog(
+            self._root,
+            theme=self._theme,
+            calculator=self._calculator,
+            initial_value=initial,
+        ).show()
 
     def _store_result(self) -> None:
         """Store the current result as a variable."""
@@ -383,7 +395,12 @@ class App:
 
     def _open_manage_functions(self) -> None:
         """Open the manage functions dialog."""
-        self._event_bus.emit("open_manage_functions")
+        FunctionsListDialog(
+            self._root,
+            theme=self._theme,
+            event_bus=self._event_bus,
+            calculator=self._calculator,
+        ).show()
 
     def _open_manage_units(self) -> None:
         """Open the manage units dialog."""

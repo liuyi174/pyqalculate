@@ -8,6 +8,7 @@ from tkinter import messagebox
 from pyqalculate_gui.event_bus import (
     CLEAR_ALL,
     COPY_RESULT,
+    OPEN_NUMBER_BASES,
     OPEN_PLOT,
     OPEN_PREFERENCES,
     TOGGLE_CONVERSION,
@@ -71,6 +72,10 @@ class MenuBar:
         menubar.add_cascade(label="Mode", menu=menu)
         menu.add_checkbutton(label="Exact Mode", variable=self._exact_var)
         menu.add_separator()
+        menu.add_command(label="Functions...", command=self._emit("open_manage_functions"))
+        menu.add_command(label="Variables...", command=self._emit("open_manage_variables"))
+        menu.add_command(label="Units...", command=self._emit("open_manage_units"))
+        menu.add_separator()
         menu.add_command(label="Preferences...", command=self._emit(OPEN_PREFERENCES))
 
     def _build_view_menu(self, menubar: tk.Menu) -> None:
@@ -83,6 +88,7 @@ class MenuBar:
         )
         menu.add_separator()
         menu.add_command(label="Plot...", command=self._emit(OPEN_PLOT))
+        menu.add_command(label="Number Bases...", command=self._emit(OPEN_NUMBER_BASES))
 
     def _build_help_menu(self, menubar: tk.Menu) -> None:
         menu = tk.Menu(menubar, tearoff=0)
