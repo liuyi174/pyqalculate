@@ -1443,20 +1443,37 @@ class MathStructure:
         return acc if acc else None
 
     @staticmethod
-    def _rebuild_units_from_exponents(exponents: dict[str, float]) -> list["MathStructure"]:
+    def _rebuild_units_from_exponents(
+        exponents: dict[str, float],
+        unit_sources: "dict[str, Unit] | None" = None,
+    ) -> list["MathStructure"]:
         """Rebuild unit MathStructure nodes from a name→exponent mapping.
+
+        Args:
+            exponents: Mapping of unit name → total exponent.
+            unit_sources: Optional mapping of unit name → original Unit object.
+                When provided, the original unit is reused instead of creating
+                a new bare Unit, preserving alias chains and metadata.
 
         Returns a list of UNIT or POWER(UNIT, exp) nodes, skipping exponent 0.
         Exponent 1 produces a plain UNIT node; other values produce POWER(UNIT, exp).
         """
         from pyqalculate.unit import Unit
+        if unit_sources is None:
+            unit_sources = {}
         result: list[MathStructure] = []
         for name, exp_val in sorted(exponents.items()):
             if abs(exp_val) < 1e-12:
                 continue  # unit^0 = 1, omit
             unit_node = MathStructure(struct_type=StructureType.UNIT)
-            unit_node._unit = Unit(name=name, is_local=False, is_builtin=True)
-            unit_node._unit.add_name(name)
+            # Reuse the original unit object when available to preserve
+            # alias chains (AliasUnit → base CompositeUnit) and metadata.
+            original_unit = unit_sources.get(name)
+            if original_unit is not None:
+                unit_node._unit = original_unit
+            else:
+                unit_node._unit = Unit(name=name, is_local=False, is_builtin=True)
+                unit_node._unit.add_name(name)
             if abs(exp_val - 1.0) < 1e-12:
                 result.append(unit_node)
             else:
@@ -1465,6 +1482,36 @@ class MathStructure:
                 power_node._children = [unit_node, exp_node]
                 result.append(power_node)
         return result
+
+    @staticmethod
+    def _collect_unit_sources(node: "MathStructure", acc: "dict[str, Unit]") -> None:
+        """Walk a MathStructure tree and collect unit name → original Unit object.
+
+        This preserves the original Unit (which may be an AliasUnit with a full
+        alias chain) so that _rebuild_units_from_exponents can reuse it instead of
+        creating a bare Unit that loses alias metadata.
+        """
+        if node._type == StructureType.UNIT and node._unit is not None:
+            name = node._unit.name()
+            if name not in acc:
+                acc[name] = node._unit
+        elif node._type == StructureType.POWER and len(node._children) == 2:
+            base = node._children[0]
+            if base._type == StructureType.UNIT and base._unit is not None:
+                name = base._unit.name()
+                if name not in acc:
+                    acc[name] = base._unit
+            elif base._type == StructureType.POWER and len(base._children) == 2:
+                inner = base._children[0]
+                if inner._type == StructureType.UNIT and inner._unit is not None:
+                    name = inner._unit.name()
+                    if name not in acc:
+                        acc[name] = inner._unit
+        elif node._type == StructureType.MULTIPLICATION:
+            for child in node._children:
+                MathStructure._collect_unit_sources(child, acc)
+        elif node._type == StructureType.INVERSE and node._children:
+            MathStructure._collect_unit_sources(node._children[0], acc)
 
     def _simplify_unit_mul(self) -> "MathStructure | None":
         """Simplify a multiplication that contains units.
@@ -1504,6 +1551,7 @@ class MathStructure:
         # Separate numeric parts, unit parts, and other parts
         numeric_parts: list[MathStructure] = []
         unit_exponents: dict[str, float] = {}
+        unit_sources: "dict[str, Unit]" = {}  # name → original Unit object
         other_parts: list[MathStructure] = []
 
         for f in factors:
@@ -1516,11 +1564,13 @@ class MathStructure:
             if extracted is not None:
                 for name, exp_val in extracted.items():
                     unit_exponents[name] = unit_exponents.get(name, 0.0) + exp_val
+                # Collect original unit objects to preserve alias chains
+                self._collect_unit_sources(f, unit_sources)
             else:
                 other_parts.append(f)
 
-        # Rebuild simplified unit nodes
-        rebuilt_units = self._rebuild_units_from_exponents(unit_exponents)
+        # Rebuild simplified unit nodes, reusing original unit objects
+        rebuilt_units = self._rebuild_units_from_exponents(unit_exponents, unit_sources)
 
         # Multiply numeric parts together
         combined_num: MathStructure | None = None
