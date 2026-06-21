@@ -1,148 +1,196 @@
-"""Main window for PyQalculate GUI.
+"""Main window for PyQalculate v2.2 GUI.
 
-Provides a simple tkinter-based calculator interface with expression input,
-result display, exact/approximate mode toggle, and a status bar.
+Modern tkinter-based calculator interface with:
+- Menu bar (File, Edit, View, Help)
+- Expression input with history, undo/redo
+- Result display with copy support
+- History view with answer(N) recall
+- Status bar with calculator info
 """
 
 from __future__ import annotations
 
+import re
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import traceback
 
 from pyqalculate.calculator import Calculator
 from pyqalculate.types import ApproximationMode, EvaluationOptions, PrintOptions
+from pyqalculate_gui.expression_edit import ExpressionEdit
+from pyqalculate_gui.result_view import ResultView
+from pyqalculate_gui.history_view import HistoryView
 
 
-class CalculatorApp:
+class MainWindow:
     """Main calculator application window.
 
-    Features:
-        - Expression input with Enter key submission
-        - Result area with auto-scroll
-        - Exact/Approximate mode toggle
-        - Copy result on double-click
-        - Clear button to reset
-        - Status bar with calculator info
+    Orchestrates the expression input, result display, history view,
+    menu bar, and status bar into a cohesive calculator UI.
     """
 
-    def __init__(self) -> None:
-        self._calc = Calculator()
-        self._calc.load_definitions()
-        self._exact_mode = True
+    _ANSWER_RE = re.compile(r"answer\(\s*(-?\d+)\s*\)")
 
+    def __init__(self) -> None:
         self._root = tk.Tk()
         self._root.title("PyQalculate")
-        self._root.geometry("600x450")
-        self._root.minsize(400, 300)
+        self._root.geometry("860x620")
+        self._root.minsize(600, 400)
 
-        self._build_ui()
+        # Calculator engine
+        self._calc = Calculator()
+        self._calc.load_definitions()
+
+        # Mode state
+        self._exact_mode = True
+
+        # Build UI
+        self._create_menu_bar()
+        self._create_main_layout()
+        self._create_status_bar()
         self._update_status()
 
-    def _build_ui(self) -> None:
-        """Build the main window UI."""
-        main_frame = ttk.Frame(self._root, padding=8)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # Focus expression input on startup
+        self._root.after(100, self._expr_edit.focus_input)
 
-        # --- Input row: [Entry] [Calculate] ---
-        input_frame = ttk.Frame(main_frame)
-        input_frame.pack(fill=tk.X, pady=(0, 4))
-        input_frame.columnconfigure(0, weight=1)
+    # ==================================================================
+    # Menu bar
+    # ==================================================================
 
-        self._entry = ttk.Entry(input_frame, font=("Consolas", 12))
-        self._entry.grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        self._entry.bind("<Return>", self._on_enter)
-        self._entry.focus_set()
+    def _create_menu_bar(self) -> None:
+        """Create the application menu bar."""
+        menubar = tk.Menu(self._root)
+        self._root.config(menu=menubar)
 
-        self._calc_btn = ttk.Button(
-            input_frame, text="Calculate", width=10, command=self._calculate
+        # File menu
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Clear All", command=self._clear_all)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self._root.quit)
+        menubar.add_cascade(label="File", menu=file_menu)
+
+        # Edit menu
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        edit_menu.add_command(
+            label="Copy Result", command=self._copy_result, accelerator="Ctrl+C"
         )
-        self._calc_btn.grid(row=0, column=1)
+        edit_menu.add_separator()
+        edit_menu.add_command(
+            label="Clear Expression",
+            command=lambda: self._expr_edit.clear(),
+            accelerator="Escape",
+        )
+        menubar.add_cascade(label="Edit", menu=edit_menu)
 
-        # --- Mode row: [x] Exact mode  |  [Clear] ---
-        mode_frame = ttk.Frame(main_frame)
-        mode_frame.pack(fill=tk.X, pady=(0, 4))
-
-        self._exact_var = tk.BooleanVar(value=True)
-        self._exact_cb = ttk.Checkbutton(
-            mode_frame,
-            text="Exact mode",
-            variable=self._exact_var,
+        # Mode menu
+        mode_menu = tk.Menu(menubar, tearoff=0)
+        self._exact_mode_var = tk.BooleanVar(value=True)
+        mode_menu.add_checkbutton(
+            label="Exact Mode",
+            variable=self._exact_mode_var,
             command=self._on_mode_toggle,
         )
-        self._exact_cb.pack(side=tk.LEFT)
+        menubar.add_cascade(label="Mode", menu=mode_menu)
 
-        self._clear_btn = ttk.Button(
-            mode_frame, text="Clear", command=self._clear
+        # View menu
+        view_menu = tk.Menu(menubar, tearoff=0)
+        self._show_history_var = tk.BooleanVar(value=True)
+        view_menu.add_checkbutton(
+            label="Show History",
+            variable=self._show_history_var,
+            command=self._toggle_history,
         )
-        self._clear_btn.pack(side=tk.RIGHT)
+        menubar.add_cascade(label="View", menu=view_menu)
 
-        # --- Results area ---
-        result_frame = ttk.LabelFrame(main_frame, text="Results", padding=4)
-        result_frame.pack(fill=tk.BOTH, expand=True)
-        result_frame.columnconfigure(0, weight=1)
-        result_frame.rowconfigure(0, weight=1)
+        # Help menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="About", command=self._show_about)
+        menubar.add_cascade(label="Help", menu=help_menu)
 
-        self._result_text = tk.Text(
-            result_frame,
-            wrap=tk.WORD,
-            font=("Consolas", 11),
-            state=tk.DISABLED,
-            bg="#f8f8f8",
-            relief=tk.FLAT,
-            padx=8,
-            pady=4,
+        # Global keyboard shortcuts
+        self._root.bind("<Control-c>", lambda e: self._copy_result())
+
+    # ==================================================================
+    # Main layout
+    # ==================================================================
+
+    def _create_main_layout(self) -> None:
+        """Create the main window layout with panels."""
+        main_frame = ttk.Frame(self._root, padding=8)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(1, weight=1)  # result area expands
+
+        # --- Expression input ---
+        self._expr_edit = ExpressionEdit(main_frame, on_submit=self._on_submit)
+        self._expr_edit.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+
+        # --- Paned window: result + history ---
+        self._paned = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
+        self._paned.grid(row=1, column=0, sticky="nsew")
+
+        # Result view (left)
+        self._result_view = ResultView(self._paned)
+        self._paned.add(self._result_view, weight=3)
+
+        # History view (right)
+        self._history_frame = ttk.Frame(self._paned)
+        self._history_view = HistoryView(
+            self._history_frame, on_recall=self._on_history_recall
         )
-        self._result_text.grid(row=0, column=0, sticky="nsew")
+        self._history_view.pack(fill=tk.BOTH, expand=True)
+        self._paned.add(self._history_frame, weight=1)
 
-        scrollbar = ttk.Scrollbar(
-            result_frame, orient=tk.VERTICAL, command=self._result_text.yview
-        )
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self._result_text.config(yscrollcommand=scrollbar.set)
+    # ==================================================================
+    # Status bar
+    # ==================================================================
 
-        # Configure text tags
-        self._result_text.tag_configure(
-            "expression", foreground="#2060a0", font=("Consolas", 11, "bold")
-        )
-        self._result_text.tag_configure(
-            "result", foreground="#006600", font=("Consolas", 12)
-        )
-        self._result_text.tag_configure(
-            "error", foreground="#cc0000", font=("Consolas", 11)
-        )
-
-        # Double-click to copy last result
-        self._result_text.bind("<Double-Button-1>", self._on_double_click)
-        self._last_result: str = ""
-
-        # --- Status bar ---
+    def _create_status_bar(self) -> None:
+        """Create the bottom status bar."""
         self._status_var = tk.StringVar(value="")
-        status_bar = ttk.Label(
-            main_frame,
+        self._status_bar = ttk.Label(
+            self._root,
             textvariable=self._status_var,
             relief=tk.SUNKEN,
             anchor=tk.W,
-            foreground="#555555",
+            padding=(6, 2),
         )
-        status_bar.pack(fill=tk.X, pady=(4, 0))
+        self._status_bar.pack(fill=tk.X, side=tk.BOTTOM)
 
-    def _on_enter(self, event: tk.Event) -> None:
-        """Handle Enter key press."""
-        self._calculate()
+        self._mode_var = tk.StringVar(value="Exact")
+        self._mode_label = ttk.Label(
+            self._root,
+            textvariable=self._mode_var,
+            relief=tk.SUNKEN,
+            anchor=tk.E,
+            padding=(6, 2),
+            foreground="#1a5276",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self._mode_label.pack(fill=tk.X, side=tk.BOTTOM)
 
-    def _on_mode_toggle(self) -> None:
-        """Handle exact/approximate mode toggle."""
-        self._exact_mode = self._exact_var.get()
+    def _update_status(self) -> None:
+        """Update status bar with calculator statistics."""
+        n_funcs = self._calc.count_functions()
+        n_units = self._calc.count_units()
+        n_vars = self._calc.count_variables()
+        self._status_var.set(
+            f"Functions: {n_funcs}  |  Units: {n_units}  |  Variables: {n_vars}"
+        )
 
-    def _calculate(self) -> None:
-        """Calculate the expression in the input field."""
-        expr = self._entry.get().strip()
-        if not expr:
-            return
+    # ==================================================================
+    # Calculation flow
+    # ==================================================================
 
-        self._entry.delete(0, tk.END)
+    def _on_submit(self, expression: str) -> None:
+        """Handle expression submission from the input widget."""
+        # Resolve answer(N) references
+        resolved = self._resolve_answer_refs(expression)
 
+        # Record expression in history
+        self._history_view.add_expression(expression)
+
+        # Calculate
         try:
             eo = EvaluationOptions()
             po = PrintOptions()
@@ -154,66 +202,103 @@ class CalculatorApp:
                 eo.approximation = ApproximationMode.APPROXIMATE
                 po.approximate = True
 
-            result = self._calc.calculate_and_print(expr, eo=eo, po=po)
-            self._show_result(expr, result)
+            result = self._calc.calculate_and_print(resolved, eo=eo, po=po)
+
+            # Display result
+            self._result_view.show_result(expression, result, exact=self._exact_mode)
+            self._history_view.add_result(result, exact=self._exact_mode)
+
         except Exception:
             error_msg = traceback.format_exc()
-            self._show_error(expr, error_msg)
+            self._result_view.show_error(expression, error_msg)
+            self._history_view.add_error(error_msg)
 
-    def _show_result(self, expression: str, result: str) -> None:
-        """Display an expression and its result."""
-        self._result_text.config(state=tk.NORMAL)
+        # Return focus to input
+        self._expr_edit.focus_input()
 
-        # Add newline if there's existing content
-        content = self._result_text.get("1.0", tk.END).strip()
-        if content:
-            self._result_text.insert(tk.END, "\n")
+    def _resolve_answer_refs(self, expression: str) -> str:
+        """Replace answer(N) references with actual result values.
 
-        self._result_text.insert(tk.END, f"> {expression}\n", "expression")
-        self._result_text.insert(tk.END, f"= {result}\n", "result")
+        Args:
+            expression: The raw expression text.
 
-        self._result_text.config(state=tk.DISABLED)
-        self._result_text.see(tk.END)
+        Returns:
+            The expression with answer(N) replaced by numeric values.
+        """
+        def _replace(match: re.Match) -> str:
+            idx = int(match.group(1))
+            value = self._history_view.get_answer(idx)
+            if value is not None:
+                return f"({value})"
+            return match.group(0)  # leave unresolved
 
-        self._last_result = result
+        return self._ANSWER_RE.sub(_replace, expression)
 
-    def _show_error(self, expression: str, error: str) -> None:
-        """Display an expression and its error."""
-        self._result_text.config(state=tk.NORMAL)
+    def _on_history_recall(self, expression: str) -> None:
+        """Handle expression recall from history view."""
+        self._expr_edit.set_expression(expression)
 
-        content = self._result_text.get("1.0", tk.END).strip()
-        if content:
-            self._result_text.insert(tk.END, "\n")
+    # ==================================================================
+    # Mode toggle
+    # ==================================================================
 
-        self._result_text.insert(tk.END, f"> {expression}\n", "expression")
-        self._result_text.insert(tk.END, f"Error: {error}\n", "error")
-
-        self._result_text.config(state=tk.DISABLED)
-        self._result_text.see(tk.END)
-
-        self._last_result = ""
-
-    def _on_double_click(self, event: tk.Event) -> None:
-        """Copy last result to clipboard on double-click."""
-        if self._last_result:
-            self._root.clipboard_clear()
-            self._root.clipboard_append(self._last_result)
-
-    def _clear(self) -> None:
-        """Clear the results area."""
-        self._result_text.config(state=tk.NORMAL)
-        self._result_text.delete("1.0", tk.END)
-        self._result_text.config(state=tk.DISABLED)
-        self._last_result = ""
-
-    def _update_status(self) -> None:
-        """Update the status bar with calculator info."""
-        n_funcs = self._calc.count_functions()
-        n_units = self._calc.count_units()
-        n_vars = self._calc.count_variables()
-        self._status_var.set(
-            f"Functions: {n_funcs} | Units: {n_units} | Vars: {n_vars}"
+    def _on_mode_toggle(self) -> None:
+        """Toggle exact/approximate mode."""
+        self._exact_mode = self._exact_mode_var.get()
+        self._mode_var.set("Exact" if self._exact_mode else "Approximate")
+        self._mode_label.config(
+            foreground="#1a5276" if self._exact_mode else "#7d6608"
         )
+
+    # ==================================================================
+    # View toggles
+    # ==================================================================
+
+    def _toggle_history(self) -> None:
+        """Show or hide the history panel."""
+        if self._show_history_var.get():
+            self._history_frame.pack(fill=tk.BOTH, expand=True)
+            # Re-add to paned if removed
+            try:
+                self._paned.add(self._history_frame, weight=1)
+            except tk.TclError:
+                pass  # already added
+        else:
+            self._paned.forget(self._history_frame)
+
+    # ==================================================================
+    # Actions
+    # ==================================================================
+
+    def _copy_result(self) -> None:
+        """Copy the last result to clipboard."""
+        last = self._result_view.get_last_result()
+        if last:
+            self._root.clipboard_clear()
+            self._root.clipboard_append(last)
+
+    def _clear_all(self) -> None:
+        """Clear expression, results, and history."""
+        self._expr_edit.clear()
+        self._result_view.clear()
+        self._history_view.clear()
+
+    def _show_about(self) -> None:
+        """Show the About dialog."""
+        messagebox.showinfo(
+            "About PyQalculate",
+            "PyQalculate v2.2\n\n"
+            "A Python implementation of the Qalculate! calculator.\n\n"
+            "Features:\n"
+            "- Mathematical expression evaluation\n"
+            "- Unit conversion\n"
+            "- Built-in functions and variables\n"
+            "- Expression history with answer(N) recall",
+        )
+
+    # ==================================================================
+    # Run
+    # ==================================================================
 
     def run(self) -> None:
         """Start the main event loop."""
@@ -227,7 +312,7 @@ class CalculatorApp:
 
 def main() -> None:
     """Launch the PyQalculate GUI."""
-    app = CalculatorApp()
+    app = MainWindow()
     app.run()
 
 

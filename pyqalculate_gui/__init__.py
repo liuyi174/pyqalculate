@@ -1,8 +1,7 @@
 """PyQalculate GUI - graphical interface for PyQalculate.
 
-Provides a tkinter-based desktop calculator with expression input,
-result display, matplotlib plot integration, and a sidebar for browsing
-variables, functions, and units.
+Provides a modern tkinter-based desktop calculator with expression input,
+result display, history view with answer(N) support, and a status bar.
 """
 
-__version__ = "0.1.0"
+__version__ = "2.2.0"
