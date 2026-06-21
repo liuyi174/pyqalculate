@@ -3,6 +3,8 @@ import os
 import sys
 from datetime import datetime
 
+sys.stdout.reconfigure(encoding='utf-8')  # type: ignore[attr-defined]
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pyqalculate.calculator import Calculator
@@ -25,16 +27,16 @@ def main():
     passed = 0
     for name, expr, xmin, xmax in tests:
         fname = f'{name}.png'.replace(' ', '_')
-        path = os.path.join(output_dir, fname)
+        path = f"{output_dir}/{fname}"
         try:
             result = calc.calculate_and_print(f'plot({expr}, {xmin}, {xmax}, "{path}")')
             if os.path.exists(path) and os.path.getsize(path) > 0:
-                print(f'✓ {name} -> {fname} ({os.path.getsize(path)} bytes)')
+                print(f'[PASS] {name} -> {fname} ({os.path.getsize(path)} bytes)')
                 passed += 1
             else:
-                print(f'✗ {name} failed - no file created')
+                print(f'[FAIL] {name} failed - no file created')
         except Exception as e:
-            print(f'✗ {name} failed - {e}')
+            print(f'[FAIL] {name} failed - {e}')
 
     print(f'\n绘图测试: {passed}/{len(tests)} 通过')
 

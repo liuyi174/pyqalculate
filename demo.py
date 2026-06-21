@@ -6,6 +6,8 @@ from datetime import datetime
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+sys.stdout.reconfigure(encoding='utf-8')
+
 from pyqalculate.calculator import Calculator
 
 def main():
@@ -19,7 +21,7 @@ def main():
     def save_result(filename, content):
         with open(os.path.join(output_dir, filename), 'w', encoding='utf-8') as f:
             f.write(content)
-        print(f'  ✓ {filename}')
+        print(f'  [PASS] {filename}')
 
     def run_test(name, expression):
         try:
@@ -210,7 +212,7 @@ def main():
     passed = 0
     for name, expr, xmin, xmax in plot_tests:
         fname = f'{name}.png'.replace(' ', '_')
-        path = os.path.join(plot_dir, fname)
+        path = f"{plot_dir}/{fname}"
         result = calc.calculate_and_print(f'plot({expr}, {xmin}, {xmax}, "{path}")')
         if os.path.exists(path) and os.path.getsize(path) > 0:
             content += f'## {name}\n'
@@ -219,12 +221,12 @@ def main():
             content += f'文件: plots/{fname}\n'
             content += f'大小: {os.path.getsize(path)} bytes\n\n'
             passed += 1
-            print(f'  ✓ {name} -> plots/{fname}')
+            print(f'  [PASS] {name} -> plots/{fname}')
         else:
             content += f'## {name}\n'
             content += f'表达式: {expr}\n'
             content += f'状态: 失败\n\n'
-            print(f'  ✗ {name} failed')
+            print(f'  [FAIL] {name} failed')
 
     save_result('10_plots.txt', content)
 
@@ -239,16 +241,16 @@ def main():
 
 | 类别 | 测试数 | 状态 |
 |------|--------|------|
-| 1. 基本运算 | {len(basic_tests)} | ✓ |
-| 2. 单位转换 | {len(unit_tests)} | ✓ |
-| 3. 物理常数 | {len(constant_tests)} | ✓ |
-| 4. 代数方程 | {len(algebra_tests)} | ✓ |
-| 5. 微积分 | {len(calculus_tests)} | ✓ |
-| 6. 矩阵运算 | {len(matrix_tests)} | ✓ |
-| 7. 统计函数 | {len(stats_tests)} | ✓ |
-| 8. 进制转换 | {len(base_tests)} | ✓ |
-| 9. 时间日期 | {len(time_tests)} | ✓ |
-| 10. 绘图功能 | {passed}/{len(plot_tests)} | ✓ |
+| 1. 基本运算 | {len(basic_tests)} | [PASS] |
+| 2. 单位转换 | {len(unit_tests)} | [PASS] |
+| 3. 物理常数 | {len(constant_tests)} | [PASS] |
+| 4. 代数方程 | {len(algebra_tests)} | [PASS] |
+| 5. 微积分 | {len(calculus_tests)} | [PASS] |
+| 6. 矩阵运算 | {len(matrix_tests)} | [PASS] |
+| 7. 统计函数 | {len(stats_tests)} | [PASS] |
+| 8. 进制转换 | {len(base_tests)} | [PASS] |
+| 9. 时间日期 | {len(time_tests)} | [PASS] |
+| 10. 绘图功能 | {passed}/{len(plot_tests)} | [PASS] |
 
 ## 功能覆盖
 

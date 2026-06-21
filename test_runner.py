@@ -14,25 +14,49 @@ from datetime import datetime
 
 
 def run_command(cmd, output_file, label):
-    """Run a command and capture output to file."""
+    """Run a command and capture output to file. Shows summary on PASS, failures on FAIL."""
+    import re
     print(f'  Running {label}...')
     try:
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             cwd=os.path.dirname(os.path.abspath(__file__)),
         )
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(result.stdout)
+            f.write(result.stdout or '')
             if result.stderr:
                 f.write('\n--- STDERR ---\n')
                 f.write(result.stderr)
+
+        combined = (result.stdout or '') + '\n' + (result.stderr or '')
+
         if result.returncode == 0:
-            print(f'    [PASS] {label}')
+            # Extract pytest summary line: "N passed, M skipped in Xs"
+            summary_match = re.search(
+                r'(\d+ passed(?:,\s*\d+ \w+)*\s+in\s+[\d.]+s)', combined
+            )
+            if summary_match:
+                print(f'    [PASS] {label} -- {summary_match.group(1)}')
+            else:
+                print(f'    [PASS] {label}')
         else:
             print(f'    [FAIL] {label} (exit code {result.returncode})')
-            print(f'           See {output_file}')
+            # Show failed test names
+            failed_tests = re.findall(r'FAILED\s+(\S+)', combined)
+            for t in failed_tests:
+                print(f'      FAILED {t}')
+            # Show last 15 lines for traceback context
+            lines = combined.strip().splitlines()
+            if lines:
+                last_lines = lines[-15:]
+                print(f'      --- Last lines ---')
+                for line in last_lines:
+                    print(f'      {line}')
+            print(f'    Full output: {output_file}')
         return result.returncode == 0
     except Exception as e:
         with open(output_file, 'w', encoding='utf-8') as f:
