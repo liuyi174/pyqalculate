@@ -95,7 +95,17 @@ class App:
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        """Assemble the widget tree."""
+        """Assemble the widget tree.
+
+        Layout matches original qalculate-gtk:
+        - MenuBar (top)
+        - ResultView (expandable middle)
+        - ExpressionEdit
+        - ExpressionStatusBar
+        - KeypadWidget
+        - PanedWindow (History + Conversion)
+        - StatusBar (bottom)
+        """
         self._menu_bar = MenuBar(
             self._root, theme=self._theme, event_bus=self._event_bus,
         )
@@ -103,13 +113,41 @@ class App:
         main = ttk.Frame(self._root, padding=8)
         main.pack(fill=tk.BOTH, expand=True)
 
+        # Status bar at bottom (packed first to anchor)
+        self._status_bar = StatusBar(
+            main, theme=self._theme, event_bus=self._event_bus,
+        )
+        self._status_bar.pack(fill=tk.X, side=tk.BOTTOM, pady=(4, 0))
+
+        # Keypad at bottom
+        self._keypad = KeypadWidget(
+            main, theme=self._theme, event_bus=self._event_bus,
+        )
+        self._keypad.pack(fill=tk.X, side=tk.BOTTOM, pady=(4, 0))
+
+        # PanedWindow for history (bottom area)
+        self._paned = ttk.PanedWindow(main, orient=tk.HORIZONTAL)
+        self._paned.pack(fill=tk.X, side=tk.BOTTOM, pady=(4, 0))
+
+        self._history_view = HistoryView(
+            self._paned, theme=self._theme, event_bus=self._event_bus,
+        )
+        self._paned.add(self._history_view, weight=1)
+
+        # Expression status bar (below expression)
+        self._expr_status = ExpressionStatusBar(
+            main, theme=self._theme, event_bus=self._event_bus,
+        )
+        self._expr_status.pack(fill=tk.X, side=tk.BOTTOM, pady=(0, 4))
+
+        # Expression edit (below result)
         self._expr_edit = ExpressionEdit(
             main,
             theme=self._theme,
             event_bus=self._event_bus,
             state=self._state,
         )
-        self._expr_edit.pack(fill=tk.X, pady=(0, 0))
+        self._expr_edit.pack(fill=tk.X, side=tk.BOTTOM, pady=(0, 0))
 
         # Autocomplete popup — wired to expression edit's text widget
         self._autocomplete = AutoComplete(
@@ -124,35 +162,11 @@ class App:
         self._expr_edit.bind_key("<Escape>", self._on_escape_key)
         self._expr_edit.bind_key("<Tab>", self._on_tab_key)
 
-        self._expr_status = ExpressionStatusBar(
-            main,
-            theme=self._theme,
-            event_bus=self._event_bus,
-        )
-        self._expr_status.pack(fill=tk.X, pady=(0, 4))
-
-        self._keypad = KeypadWidget(
-            main, theme=self._theme, event_bus=self._event_bus,
-        )
-        self._keypad.pack(fill=tk.X, pady=(0, 4))
-
-        self._paned = ttk.PanedWindow(main, orient=tk.HORIZONTAL)
-        self._paned.pack(fill=tk.BOTH, expand=True, pady=(0, 4))
-
+        # Result view (expandable middle - fills remaining space)
         self._result_view = ResultView(
-            self._paned, theme=self._theme, event_bus=self._event_bus,
-        )
-        self._paned.add(self._result_view, weight=3)
-
-        self._history_view = HistoryView(
-            self._paned, theme=self._theme, event_bus=self._event_bus,
-        )
-        self._paned.add(self._history_view, weight=1)
-
-        self._status_bar = StatusBar(
             main, theme=self._theme, event_bus=self._event_bus,
         )
-        self._status_bar.pack(fill=tk.X, side=tk.BOTTOM)
+        self._result_view.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
 
     # ------------------------------------------------------------------
     # Event wiring
@@ -306,7 +320,20 @@ class App:
         theme_name = settings.get("theme", "light")
         if isinstance(theme_name, str):
             self._theme = get_theme(theme_name)
-        # TODO: push new theme to every child widget
+        # Push new theme to every child widget that supports it
+        for widget in (
+            self._menu_bar,
+            self._status_bar,
+            self._keypad,
+            self._history_view,
+            self._expr_status,
+            self._expr_edit,
+            self._result_view,
+            self._autocomplete,
+        ):
+            set_theme_fn = getattr(widget, "set_theme", None)
+            if set_theme_fn is not None:
+                set_theme_fn(self._theme)
 
     def _on_result_displayed(self, expression: str, result: str, exact: bool) -> None:
         """Update expression status bar when a result is displayed."""
