@@ -1,117 +1,124 @@
 """Unit conversion panel for PyQalculate GUI.
 
-Provides a two-panel interface:
-- Left: category tree (Length, Mass, Time, etc.)
-- Right: unit list filtered by selected category
-- Bottom: value input, target unit selector, result display
+Two-panel interface: category tree on the left, unit list on the right.
+Bottom bar holds value input, target unit entry, and result display.
+All colours and fonts derive from the active Theme — zero hardcoded
+values.  Communication uses the EventBus (``CONVERSION_RESULT`` event).
 
-Supports real-time conversion, category filtering, unit search,
-and copy-to-clipboard.
+Public API
+----------
+``set_value(v)``       – set the numeric input
+``set_target_unit(u)`` – set the target unit entry
+``convert()``          – trigger conversion programmatically
 """
 
 from __future__ import annotations
 
-import re
 import tkinter as tk
 from tkinter import ttk
-from typing import TYPE_CHECKING, Callable
 
-if TYPE_CHECKING:
-    from pyqalculate.calculator import Calculator
+from pyqalculate_gui.calculator_service import CalculatorService
+from pyqalculate_gui.event_bus import CONVERSION_RESULT, EventBus
+from pyqalculate_gui.theme import LIGHT, Theme
+
+# Treeview sentinel that represents "show every unit"
+_ALL_NODE = "__all__"
 
 
 class ConversionView(ttk.Frame):
-    """Unit conversion widget with category tree, unit list, and result display.
-
-    Signals:
-        on_convert(expr: str, result: str) - fired after successful conversion
-    """
-
-    # Category prefixes to strip for display
-    _CATEGORY_PREFIXES = ("!units!",)
+    """Unit-conversion widget with category tree, unit list, and result."""
 
     def __init__(
         self,
         parent: tk.Misc,
-        calculator: Calculator,
-        on_convert: Callable[[str, str], None] | None = None,
+        theme: Theme = LIGHT,
+        event_bus: EventBus | None = None,
+        calculator: CalculatorService | None = None,
     ) -> None:
         super().__init__(parent)
+        self._theme = theme
+        self._event_bus = event_bus
         self._calc = calculator
-        self._on_convert = on_convert
 
-        # Category data: display_name -> full category string
-        self._categories: dict[str, str] = {}
-        # Unit data per category: category_str -> list of (display_name, unit_name)
-        self._units_by_category: dict[str, list[tuple[str, str]]] = {}
+        # Internal state --------------------------------------------------
+        # category iid → raw category string (e.g. "Length", "Electricity/Capacitance")
+        self._cat_map: dict[str, str] = {}
+        # raw category → list of (display_name, unit_key)
+        self._units_by_cat: dict[str, list[tuple[str, str]]] = {}
+        # flat list currently shown in the listbox
+        self._current_units: list[tuple[str, str]] = []
+        # key of the source unit selected from the list
+        self._selected_from_key: str | None = None
 
         self._build_ui()
-        self._populate_categories()
+        if self._calc is not None:
+            self._populate_categories()
 
     # ==================================================================
     # UI construction
     # ==================================================================
 
     def _build_ui(self) -> None:
-        """Build the conversion panel layout."""
+        """Build the full conversion panel layout."""
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)  # tree/list area expands
         self.rowconfigure(1, weight=0)  # conversion controls fixed
 
-        # --- Top: category tree + unit list (paned) ---
-        top_frame = ttk.Frame(self)
-        top_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
-        top_frame.columnconfigure(0, weight=1)
-        top_frame.columnconfigure(1, weight=2)
-        top_frame.rowconfigure(0, weight=1)
+        self._build_browse_area()
+        self._build_conversion_area()
 
-        # Category tree (left)
-        cat_frame = ttk.LabelFrame(top_frame, text="Categories", padding=4)
-        cat_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
-        cat_frame.columnconfigure(0, weight=1)
-        cat_frame.rowconfigure(0, weight=1)
+    def _build_browse_area(self) -> None:
+        """Category tree + unit list with search."""
+        frame = ttk.Frame(self)
+        frame.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=2)
+        frame.rowconfigure(0, weight=1)
+
+        # --- category tree (left) ---
+        cat_outer = ttk.LabelFrame(frame, text="Categories", padding=4)
+        cat_outer.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        cat_outer.columnconfigure(0, weight=1)
+        cat_outer.rowconfigure(0, weight=1)
 
         self._cat_tree = ttk.Treeview(
-            cat_frame, show="tree", selectmode="browse", height=12
+            cat_outer, show="tree", selectmode="browse", height=12,
         )
         self._cat_tree.grid(row=0, column=0, sticky="nsew")
 
         cat_scroll = ttk.Scrollbar(
-            cat_frame, orient=tk.VERTICAL, command=self._cat_tree.yview
+            cat_outer, orient=tk.VERTICAL, command=self._cat_tree.yview,
         )
         cat_scroll.grid(row=0, column=1, sticky="ns")
         self._cat_tree.config(yscrollcommand=cat_scroll.set)
-
         self._cat_tree.bind("<<TreeviewSelect>>", self._on_category_select)
 
-        # Unit list (right) with search
-        unit_frame = ttk.LabelFrame(top_frame, text="Units", padding=4)
-        unit_frame.grid(row=0, column=1, sticky="nsew")
-        unit_frame.columnconfigure(0, weight=1)
-        unit_frame.rowconfigure(1, weight=1)
+        # --- unit list (right) with search ---
+        unit_outer = ttk.LabelFrame(frame, text="Units", padding=4)
+        unit_outer.grid(row=0, column=1, sticky="nsew")
+        unit_outer.columnconfigure(0, weight=1)
+        unit_outer.rowconfigure(1, weight=1)
 
-        # Unit search bar
-        search_frame = ttk.Frame(unit_frame)
+        # search bar
+        search_frame = ttk.Frame(unit_outer)
         search_frame.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         search_frame.columnconfigure(1, weight=1)
 
         ttk.Label(search_frame, text="Search:").grid(row=0, column=0, padx=(0, 4))
-        self._unit_search_var = tk.StringVar()
-        self._unit_search_entry = ttk.Entry(
-            search_frame, textvariable=self._unit_search_var
-        )
-        self._unit_search_entry.grid(row=0, column=1, sticky="ew")
-        self._unit_search_var.trace_add("write", lambda *_: self._filter_units())
+        self._search_var = tk.StringVar()
+        search_entry = ttk.Entry(search_frame, textvariable=self._search_var)
+        search_entry.grid(row=0, column=1, sticky="ew")
+        self._search_var.trace_add("write", lambda *_: self._filter_units())
 
-        # Unit listbox
-        list_frame = ttk.Frame(unit_frame)
+        # listbox
+        list_frame = ttk.Frame(unit_outer)
         list_frame.grid(row=1, column=0, sticky="nsew")
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
 
         self._unit_listbox = tk.Listbox(
             list_frame,
-            font=("Consolas", 10),
+            font=self._theme.info_font,
             activestyle="none",
             selectmode=tk.SINGLE,
             exportselection=False,
@@ -119,7 +126,7 @@ class ConversionView(ttk.Frame):
         self._unit_listbox.grid(row=0, column=0, sticky="nsew")
 
         unit_scroll = ttk.Scrollbar(
-            list_frame, orient=tk.VERTICAL, command=self._unit_listbox.yview
+            list_frame, orient=tk.VERTICAL, command=self._unit_listbox.yview,
         )
         unit_scroll.grid(row=0, column=1, sticky="ns")
         self._unit_listbox.config(yscrollcommand=unit_scroll.set)
@@ -127,101 +134,87 @@ class ConversionView(ttk.Frame):
         self._unit_listbox.bind("<<ListboxSelect>>", self._on_unit_select)
         self._unit_listbox.bind("<Double-Button-1>", self._on_unit_double_click)
 
-        # --- Bottom: conversion controls ---
-        conv_frame = ttk.LabelFrame(self, text="Convert", padding=6)
-        conv_frame.grid(row=1, column=0, sticky="ew")
-        conv_frame.columnconfigure(1, weight=1)
+    def _build_conversion_area(self) -> None:
+        """Value entry, from/to display, convert button, result."""
+        conv = ttk.LabelFrame(self, text="Convert", padding=6)
+        conv.grid(row=1, column=0, sticky="ew")
+        conv.columnconfigure(1, weight=1)
 
-        # Value input
-        ttk.Label(conv_frame, text="Value:").grid(
-            row=0, column=0, padx=(0, 4), sticky="w"
-        )
+        # row 0 – value + from unit
+        ttk.Label(conv, text="Value:").grid(row=0, column=0, sticky="w", padx=(0, 4))
         self._value_var = tk.StringVar(value="1")
         self._value_entry = ttk.Entry(
-            conv_frame, textvariable=self._value_var, width=16, font=("Consolas", 11)
+            conv, textvariable=self._value_var, width=16,
+            font=self._theme.expression_font,
         )
         self._value_entry.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-        self._value_var.trace_add("write", lambda *_: self._on_value_changed())
+        self._value_var.trace_add("write", lambda *_: self._maybe_auto_convert())
 
-        # From unit display
-        ttk.Label(conv_frame, text="From:").grid(
-            row=0, column=2, padx=(0, 4), sticky="w"
-        )
-        self._from_unit_var = tk.StringVar(value="(select a unit)")
-        self._from_unit_label = ttk.Label(
-            conv_frame,
-            textvariable=self._from_unit_var,
-            font=("Consolas", 10, "bold"),
-            foreground="#1a5276",
-            width=16,
+        ttk.Label(conv, text="From:").grid(row=0, column=2, sticky="w", padx=(0, 4))
+        self._from_var = tk.StringVar(value="(select a unit)")
+        ttk.Label(
+            conv,
+            textvariable=self._from_var,
+            font=self._theme.info_font,
+            foreground=self._theme.result_fg,
+            width=18,
             anchor="w",
-        )
-        self._from_unit_label.grid(row=0, column=3, sticky="w", padx=(0, 8))
+        ).grid(row=0, column=3, sticky="w")
 
-        # Target unit selector
-        ttk.Label(conv_frame, text="To:").grid(
-            row=1, column=0, padx=(0, 4), sticky="w", pady=(4, 0)
+        # row 1 – target unit + convert
+        ttk.Label(conv, text="To:").grid(
+            row=1, column=0, sticky="w", padx=(0, 4), pady=(4, 0),
         )
-        self._to_unit_var = tk.StringVar()
-        self._to_unit_entry = ttk.Entry(
-            conv_frame,
-            textvariable=self._to_unit_var,
-            width=16,
-            font=("Consolas", 10),
+        self._to_var = tk.StringVar()
+        to_entry = ttk.Entry(
+            conv, textvariable=self._to_var, width=16,
+            font=self._theme.info_font,
         )
-        self._to_unit_entry.grid(
-            row=1, column=1, sticky="ew", padx=(0, 8), pady=(4, 0)
-        )
-        self._to_unit_entry.bind("<Return>", lambda e: self._do_convert())
-        self._to_unit_var.trace_add("write", lambda *_: self._on_target_changed())
+        to_entry.grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(4, 0))
+        to_entry.bind("<Return>", lambda _: self._do_convert())
+        self._to_var.trace_add("write", lambda *_: self._maybe_auto_convert())
 
-        # Convert button
-        self._convert_btn = ttk.Button(
-            conv_frame, text="Convert", command=self._do_convert
+        ttk.Button(conv, text="Convert", command=self._do_convert).grid(
+            row=1, column=2, columnspan=2, sticky="ew", pady=(4, 0),
         )
-        self._convert_btn.grid(row=1, column=2, columnspan=2, pady=(4, 0), sticky="ew")
 
-        # Result display
-        result_frame = ttk.Frame(conv_frame)
+        # row 2 – result + error + copy
+        result_frame = ttk.Frame(conv)
         result_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(8, 0))
         result_frame.columnconfigure(0, weight=1)
 
-        self._result_var = tk.StringVar(value="")
-        self._result_label = ttk.Label(
+        self._result_var = tk.StringVar()
+        ttk.Label(
             result_frame,
             textvariable=self._result_var,
-            font=("Consolas", 12, "bold"),
-            foreground="#1e8449",
+            font=self._theme.result_font,
+            foreground=self._theme.result_fg,
             anchor="w",
             wraplength=500,
-        )
-        self._result_label.grid(row=0, column=0, sticky="ew")
+        ).grid(row=0, column=0, sticky="ew")
 
-        self._error_var = tk.StringVar(value="")
-        self._error_label = ttk.Label(
+        self._error_var = tk.StringVar()
+        ttk.Label(
             result_frame,
             textvariable=self._error_var,
-            font=("Consolas", 10),
-            foreground="#c0392b",
+            font=self._theme.info_font,
+            foreground=self._theme.error_fg,
             anchor="w",
-        )
-        self._error_label.grid(row=1, column=0, sticky="ew")
+        ).grid(row=1, column=0, sticky="ew")
 
-        # Copy result button
         btn_row = ttk.Frame(result_frame)
         btn_row.grid(row=2, column=0, sticky="e", pady=(4, 0))
-        self._copy_btn = ttk.Button(
-            btn_row, text="Copy Result", command=self._copy_result
+        ttk.Button(btn_row, text="Copy Result", command=self._copy_result).pack(
+            side=tk.RIGHT,
         )
-        self._copy_btn.pack(side=tk.RIGHT)
 
-        # Status label
-        self._status_var = tk.StringVar(value="")
+        # status line
+        self._status_var = tk.StringVar()
         ttk.Label(
-            conv_frame,
+            conv,
             textvariable=self._status_var,
-            foreground="#666666",
-            font=("TkDefaultFont", 8),
+            foreground=self._theme.separator_fg,
+            font=self._theme.info_font,
         ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
     # ==================================================================
@@ -229,227 +222,140 @@ class ConversionView(ttk.Frame):
     # ==================================================================
 
     def _populate_categories(self) -> None:
-        """Build the category tree from calculator units."""
-        # Collect all categories
-        cat_set: set[str] = set()
-        for unit in self._calc._units.values():
-            cat = unit.category()
-            if cat:
-                cat_set.add(cat)
+        """Build the category tree from calculator unit data."""
+        if self._calc is None:
+            return
+        raw_cats = self._calc.get_unit_categories()
 
-        # Build parent->children mapping
-        # Categories like "Electricity/Capacitance" have parent "Electricity"
-        self._categories.clear()
-        self._units_by_category.clear()
-
-        # Normalize category names for display
-        def display_name(cat: str) -> str:
-            """Convert category string to display name."""
-            name = cat
-            for prefix in self._CATEGORY_PREFIXES:
-                if name.startswith(prefix):
-                    name = name[len(prefix):]
-            # Handle subcategory: take last part
-            if "/" in name:
-                return name.split("/")[-1]
-            return name
-
-        # Organize into tree structure
-        tree_data: dict[str, list[str]] = {}  # parent -> [children]
-        root_cats: list[str] = []
-
-        for cat in sorted(cat_set):
+        # Organize into parent → children mapping
+        tree_children: dict[str, list[str]] = {}
+        roots: list[str] = []
+        for cat in sorted(raw_cats):
             parts = cat.split("/")
             if len(parts) == 1:
-                root_cats.append(cat)
+                roots.append(cat)
             else:
                 parent = "/".join(parts[:-1])
-                if parent not in tree_data:
-                    tree_data[parent] = []
-                tree_data[parent].append(cat)
+                tree_children.setdefault(parent, []).append(cat)
 
-        # Insert into treeview
         self._cat_tree.delete(*self._cat_tree.get_children())
+        self._cat_map.clear()
+        self._units_by_cat.clear()
 
-        # Add "All" root node
-        self._cat_tree.insert("", tk.END, iid="__all__", text="All Units", open=True)
+        # "All Units" root node
+        all_iid = self._cat_tree.insert(
+            "", tk.END, iid=_ALL_NODE, text="All Units", open=True,
+        )
 
-        # Add root categories
-        for cat in sorted(root_cats):
-            dname = display_name(cat)
-            iid = self._cat_tree.insert(
-                "__all__", tk.END, text=dname, open=False
-            )
-            self._categories[iid] = cat
+        for cat in sorted(roots):
+            display = cat.split("/")[-1]
+            iid = self._cat_tree.insert(all_iid, tk.END, text=display, open=False)
+            self._cat_map[iid] = cat
 
-            # Add subcategories
-            children = tree_data.get(cat, [])
-            for child in sorted(children):
-                cdname = display_name(child)
-                ciid = self._cat_tree.insert(iid, tk.END, text=cdname)
-                self._categories[ciid] = child
+            for child in sorted(tree_children.get(cat, [])):
+                child_display = child.split("/")[-1]
+                ciid = self._cat_tree.insert(iid, tk.END, text=child_display)
+                self._cat_map[ciid] = child
 
-        # Pre-build unit lists per category
-        self._build_unit_lists()
-
-    def _build_unit_lists(self) -> None:
-        """Build unit lists for each category."""
-        self._units_by_category.clear()
-
-        for unit in self._calc._units.values():
-            if not unit.is_active():
-                continue
-            cat = unit.category()
-            if not cat:
-                cat = "Uncategorized"
-
-            name = unit.name()
-            abbrev = unit.abbreviation()
-            singular = unit.singular()
-
-            # Build display: "meter (m)" or just "meter"
-            if abbrev and abbrev != name:
-                display = f"{name} ({abbrev})"
-            else:
-                display = name
-
-            if cat not in self._units_by_category:
-                self._units_by_category[cat] = []
-            self._units_by_category[cat].append((display, name))
-
-        # Sort each category
-        for cat in self._units_by_category:
-            self._units_by_category[cat].sort(key=lambda x: x[0].lower())
+        # Pre-build per-category unit lists
+        calc = self._calc
+        for cat, keys in raw_cats.items():
+            entries = [
+                (calc.get_unit_display_name(k), k) for k in keys
+            ]
+            entries.sort(key=lambda e: e[0].lower())
+            self._units_by_cat[cat] = entries
 
     # ==================================================================
     # Event handlers
     # ==================================================================
 
-    def _on_category_select(self, event: tk.Event) -> None:
-        """Handle category selection change."""
+    def _on_category_select(self, _event: tk.Event) -> None:
+        """Rebuild the unit list for the chosen category."""
         sel = self._cat_tree.selection()
         if not sel:
             return
-
         iid = sel[0]
-        if iid == "__all__":
-            # Show all units
+        if iid == _ALL_NODE:
             self._show_all_units()
         else:
-            cat = self._categories.get(iid, "")
+            cat = self._cat_map.get(iid, "")
             self._show_units_for_category(cat)
-
-        # Clear search
-        self._unit_search_var.set("")
+        self._search_var.set("")
 
     def _show_all_units(self) -> None:
-        """Show all units across all categories."""
-        self._unit_listbox.delete(0, tk.END)
+        """Populate the listbox with every active unit."""
+        seen: set[str] = set()
         self._current_units = []
-
-        seen = set()
-        for cat_units in self._units_by_category.values():
-            for display, name in cat_units:
-                if name not in seen:
-                    seen.add(name)
-                    self._current_units.append((display, name))
-
-        self._current_units.sort(key=lambda x: x[0].lower())
-        for display, _ in self._current_units:
-            self._unit_listbox.insert(tk.END, display)
-
+        for entries in self._units_by_cat.values():
+            for display, key in entries:
+                if key not in seen:
+                    seen.add(key)
+                    self._current_units.append((display, key))
+        self._current_units.sort(key=lambda e: e[0].lower())
+        self._refresh_listbox()
         self._status_var.set(f"{len(self._current_units)} units")
 
     def _show_units_for_category(self, category: str) -> None:
-        """Show units for a specific category."""
-        self._unit_listbox.delete(0, tk.END)
+        """Populate the listbox for *category* and its sub-categories."""
+        seen: set[str] = set()
         self._current_units = []
-
-        # Collect units from this category and subcategories
-        seen = set()
-        for cat, units in self._units_by_category.items():
+        for cat, entries in self._units_by_cat.items():
             if cat == category or cat.startswith(category + "/"):
-                for display, name in units:
-                    if name not in seen:
-                        seen.add(name)
-                        self._current_units.append((display, name))
-
-        self._current_units.sort(key=lambda x: x[0].lower())
-        for display, _ in self._current_units:
-            self._unit_listbox.insert(tk.END, display)
-
+                for display, key in entries:
+                    if key not in seen:
+                        seen.add(key)
+                        self._current_units.append((display, key))
+        self._current_units.sort(key=lambda e: e[0].lower())
+        self._refresh_listbox()
         self._status_var.set(f"{len(self._current_units)} units in {category}")
 
     def _filter_units(self) -> None:
-        """Filter unit list by search text."""
-        query = self._unit_search_var.get().lower().strip()
-        self._unit_listbox.delete(0, tk.END)
-
+        """Filter the listbox by search text."""
+        query = self._search_var.get().lower().strip()
         if not query:
-            # Show current category units
-            for display, _ in getattr(self, "_current_units", []):
-                self._unit_listbox.insert(tk.END, display)
+            self._refresh_listbox()
             return
-
-        filtered = []
-        for display, name in getattr(self, "_current_units", []):
-            if query in display.lower() or query in name.lower():
-                filtered.append((display, name))
-
+        filtered = [
+            (d, k) for d, k in self._current_units
+            if query in d.lower() or query in k.lower()
+        ]
+        self._unit_listbox.delete(0, tk.END)
         for display, _ in filtered:
             self._unit_listbox.insert(tk.END, display)
-
         self._status_var.set(f"{len(filtered)} matching units")
 
-    def _on_unit_select(self, event: tk.Event) -> None:
-        """Handle unit selection - update from unit display."""
-        sel = self._unit_listbox.curselection()
-        if not sel:
-            return
+    def _refresh_listbox(self) -> None:
+        """Reload the listbox from ``_current_units``."""
+        self._unit_listbox.delete(0, tk.END)
+        for display, _ in self._current_units:
+            self._unit_listbox.insert(tk.END, display)
 
-        idx = sel[0]
-        units = getattr(self, "_current_units", [])
-        if idx >= len(units):
-            return
+    def _on_unit_select(self, _event: tk.Event) -> None:
+        """Single-click: select source unit."""
+        self._apply_selection()
 
-        display, name = units[idx]
-        self._from_unit_var.set(display)
-        self._selected_from_unit = name
-
-        # Auto-convert if value is set
-        self._maybe_auto_convert()
-
-    def _on_unit_double_click(self, event: tk.Event) -> None:
-        """Handle double-click on unit - convert immediately."""
-        sel = self._unit_listbox.curselection()
-        if not sel:
-            return
-
-        idx = sel[0]
-        units = getattr(self, "_current_units", [])
-        if idx >= len(units):
-            return
-
-        display, name = units[idx]
-        self._from_unit_var.set(display)
-        self._selected_from_unit = name
+    def _on_unit_double_click(self, _event: tk.Event) -> None:
+        """Double-click: select source unit and convert immediately."""
+        self._apply_selection()
         self._do_convert()
 
-    def _on_value_changed(self) -> None:
-        """Handle value input change."""
-        self._maybe_auto_convert()
-
-    def _on_target_changed(self) -> None:
-        """Handle target unit input change."""
+    def _apply_selection(self) -> None:
+        """Update the *From* display from the current listbox selection."""
+        sel = self._unit_listbox.curselection()
+        if not sel:
+            return
+        idx = sel[0]
+        if idx >= len(self._current_units):
+            return
+        display, key = self._current_units[idx]
+        self._from_var.set(display)
+        self._selected_from_key = key
         self._maybe_auto_convert()
 
     def _maybe_auto_convert(self) -> None:
-        """Auto-convert if all fields are set."""
-        value_str = self._value_var.get().strip()
-        target = self._to_unit_var.get().strip()
-        from_unit = getattr(self, "_selected_from_unit", None)
-
-        if value_str and target and from_unit:
+        """Auto-convert when all three fields are populated."""
+        if self._value_var.get().strip() and self._to_var.get().strip() and self._selected_from_key:
             self._do_convert()
 
     # ==================================================================
@@ -458,112 +364,48 @@ class ConversionView(ttk.Frame):
 
     def _do_convert(self) -> None:
         """Perform the unit conversion."""
-        # Clear previous results
         self._result_var.set("")
         self._error_var.set("")
 
-        # Validate inputs
         value_str = self._value_var.get().strip()
         if not value_str:
             self._error_var.set("Enter a value to convert")
             return
 
-        try:
-            value = float(value_str)
-        except ValueError:
-            self._error_var.set(f"Invalid number: {value_str}")
-            return
-
-        from_unit_name = getattr(self, "_selected_from_unit", None)
-        if not from_unit_name:
+        from_key = self._selected_from_key
+        if not from_key:
             self._error_var.set("Select a source unit from the list")
             return
 
-        target_str = self._to_unit_var.get().strip()
-        if not target_str:
+        to_str = self._to_var.get().strip()
+        if not to_str:
             self._error_var.set("Enter a target unit")
             return
 
-        # Look up units
-        from_unit = self._calc.get_unit(from_unit_name)
-        to_unit = self._calc.get_unit(target_str)
-
-        if from_unit is None:
-            self._error_var.set(f"Unknown unit: {from_unit_name}")
+        if not self._calc:
+            self._error_var.set("No calculator available")
             return
 
-        if to_unit is None:
-            # Try common aliases
-            to_unit = self._try_resolve_unit(target_str)
-            if to_unit is None:
-                self._error_var.set(f"Unknown target unit: {target_str}")
-                return
-
-        # Perform conversion
         try:
-            result = self._calc.convert(value, from_unit, to_unit)
-        except Exception as e:
-            self._error_var.set(f"Conversion error: {e}")
+            result = self._calc.convert(value_str, from_key, to_str)
+        except Exception as exc:
+            self._error_var.set(f"Conversion error: {exc}")
             return
 
-        if result is None:
-            self._error_var.set(
-                f"Cannot convert {from_unit.name()} to {to_unit.name()}"
-            )
+        if not result:
+            self._error_var.set(f"Cannot convert {from_key} to {to_str}")
             return
 
-        # Format result
-        result_str = self._format_result(result, to_unit)
-        self._result_var.set(result_str)
-        self._error_var.set("")
-
-        # Notify callback
-        expr = f"{value} {from_unit.abbreviation()} to {to_unit.abbreviation()}"
-        if self._on_convert:
-            self._on_convert(expr, result_str)
-
-    def _try_resolve_unit(self, name: str):
-        """Try various strategies to resolve a unit name."""
-        # Direct lookup
-        unit = self._calc.get_unit(name)
-        if unit:
-            return unit
-
-        # Try as abbreviation
-        for u in self._calc._units.values():
-            if u.abbreviation().lower() == name.lower():
-                return u
-            if u.singular().lower() == name.lower():
-                return u
-            if u.plural().lower() == name.lower():
-                return u
-
-        return None
-
-    def _format_result(self, value: float, unit) -> str:
-        """Format a conversion result for display."""
-        # Format number
-        if abs(value) == 0:
-            num_str = "0"
-        elif abs(value) >= 1e15 or (abs(value) < 1e-6 and abs(value) > 0):
-            num_str = f"{value:.6e}"
-        elif value == int(value):
-            num_str = str(int(value))
-        else:
-            # Smart decimal places
-            num_str = f"{value:.10g}"
-
-        abbrev = unit.abbreviation()
-        if abbrev and abbrev != unit.name():
-            return f"{num_str} {abbrev}"
-        return f"{num_str} {unit.name()}"
+        self._result_var.set(result)
+        if self._event_bus is not None:
+            expr = f"{value_str} {from_key} to {to_str}"
+            self._event_bus.emit(CONVERSION_RESULT, expr, result)
 
     # ==================================================================
     # Clipboard
     # ==================================================================
 
     def _copy_result(self) -> None:
-        """Copy the last result to clipboard."""
         result = self._result_var.get()
         if result:
             self.clipboard_clear()
@@ -573,38 +415,27 @@ class ConversionView(ttk.Frame):
     # Public API
     # ==================================================================
 
+    def set_value(self, value: str) -> None:
+        """Set the numeric input value."""
+        self._value_var.set(value)
+
+    def set_target_unit(self, unit: str) -> None:
+        """Set the target unit entry."""
+        self._to_var.set(unit)
+
+    def convert(self) -> None:
+        """Trigger conversion programmatically."""
+        self._do_convert()
+
     def get_last_result(self) -> str:
         """Return the last conversion result string."""
         return self._result_var.get()
 
-    def set_value(self, value: str) -> None:
-        """Set the input value."""
-        self._value_var.set(value)
-
-    def set_from_unit(self, unit_name: str) -> None:
-        """Set the source unit by name."""
-        unit = self._calc.get_unit(unit_name)
-        if unit:
-            self._selected_from_unit = unit.name()
-            abbrev = unit.abbreviation()
-            if abbrev and abbrev != unit.name():
-                self._from_unit_var.set(f"{unit.name()} ({abbrev})")
-            else:
-                self._from_unit_var.set(unit.name())
-
-    def set_target_unit(self, unit_name: str) -> None:
-        """Set the target unit by name."""
-        self._to_unit_var.set(unit_name)
-
-    def convert(self, value: str, from_unit: str, to_unit: str) -> str | None:
-        """Programmatic conversion. Returns result string or None."""
-        self.set_value(value)
-        self.set_from_unit(from_unit)
-        self.set_target_unit(to_unit)
-        self._do_convert()
-        result = self._result_var.get()
-        return result if result else None
-
     def focus_target(self) -> None:
         """Focus the target unit entry."""
-        self._to_unit_entry.focus_set()
+        for child in self.winfo_children():
+            if isinstance(child, ttk.LabelFrame) and child.cget("text") == "Convert":
+                for sub in child.winfo_children():
+                    if isinstance(sub, ttk.Entry) and sub.cget("textvariable") == str(self._to_var):
+                        sub.focus_set()
+                        return
