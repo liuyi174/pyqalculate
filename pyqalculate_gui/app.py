@@ -426,7 +426,7 @@ class App:
         cursor_text = self._expr_edit._entry.get("1.0", tk.INSERT)
         self._autocomplete.update(text, len(cursor_text))
 
-    def _on_nav_key(self, event: tk.Event) -> None:
+    def _on_nav_key(self, event: tk.Event) -> str | None:
         """Route Up/Down to autocomplete when popup is visible."""
         if self._autocomplete.is_visible():
             if event.keysym == "Up":
@@ -436,14 +436,14 @@ class App:
             return "break"
         return None
 
-    def _on_escape_key(self, event: tk.Event) -> None:
+    def _on_escape_key(self, event: tk.Event) -> str | None:
         """Hide autocomplete on Escape, or propagate if already hidden."""
         if self._autocomplete.is_visible():
             self._autocomplete.hide()
             return "break"
         return None
 
-    def _on_tab_key(self, event: tk.Event) -> None:
+    def _on_tab_key(self, event: tk.Event) -> str | None:
         """Accept current autocomplete selection on Tab."""
         if self._autocomplete.is_visible():
             selected = self._autocomplete.get_selected()
