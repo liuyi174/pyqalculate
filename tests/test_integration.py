@@ -464,7 +464,7 @@ class TestUncertaintyInterval:
                 pass  # Symbolic result is acceptable
 
     def test_4_2_interval_cube(self, calc: Calculator) -> None:
-        """interval(-3, 7)^3 => interval(-52, 68)"""
+        """interval(-3, 7)^3 => interval(-27, 343)"""
         result = calc.calculate_and_print("interval(-3, 7)^3")
         assert result != "undefined"
         # May not support interval() function
@@ -966,7 +966,7 @@ class TestStatistics:
             assert_numeric_close(result.print(), 0.02659615203, tol=0.001)
 
     def test_8_5_correlation(self, calc: Calculator) -> None:
-        """correlation(X, Y) => -0.9719076166"""
+        """correlation(X, Y) => 0.9719076166"""
         x = MathStructure.vector(
             MathStructure(1), MathStructure(2), MathStructure(3),
             MathStructure(4), MathStructure(5), MathStructure(6),

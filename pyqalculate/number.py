@@ -952,8 +952,8 @@ class Number:
         if self.is_infinite() or other.is_infinite():
             return self._add_infinities(other)
 
-        # Variance formula for intervals: uncertainties add in quadrature
-        if self.is_interval() or other.is_interval():
+        # Variance formula for ± intervals: uncertainties add in quadrature
+        if (self.is_interval() or other.is_interval()) and (self.is_plusminus() or other.is_plusminus()):
             a_mid = self.midpoint_value()
             b_mid = other.midpoint_value()
             a_unc = self.uncertainty_value()
@@ -1003,8 +1003,8 @@ class Number:
         if self.is_infinite() or other.is_infinite():
             return self._add_infinities(-other)
 
-        # Variance formula for intervals: uncertainties add in quadrature
-        if self.is_interval() or other.is_interval():
+        # Variance formula for ± intervals: uncertainties add in quadrature
+        if (self.is_interval() or other.is_interval()) and (self.is_plusminus() or other.is_plusminus()):
             a_mid = self.midpoint_value()
             b_mid = other.midpoint_value()
             a_unc = self.uncertainty_value()
@@ -1053,8 +1053,8 @@ class Number:
         if self.is_infinite() or other.is_infinite():
             return self._mul_infinities(other)
 
-        # Variance formula for intervals: relative uncertainties add in quadrature
-        if self.is_interval() or other.is_interval():
+        # Variance formula for ± intervals: relative uncertainties add in quadrature
+        if (self.is_interval() or other.is_interval()) and (self.is_plusminus() or other.is_plusminus()):
             a_mid = self.midpoint_value()
             b_mid = other.midpoint_value()
             a_unc = self.uncertainty_value()
@@ -1115,8 +1115,8 @@ class Number:
         if self.is_infinite() or other.is_infinite():
             return self._div_infinities(other)
 
-        # Variance formula for intervals: relative uncertainties add in quadrature
-        if self.is_interval() or other.is_interval():
+        # Variance formula for ± intervals: relative uncertainties add in quadrature
+        if (self.is_interval() or other.is_interval()) and (self.is_plusminus() or other.is_plusminus()):
             a_mid = self.midpoint_value()
             b_mid = other.midpoint_value()
             a_unc = self.uncertainty_value()
@@ -1188,9 +1188,9 @@ class Number:
         if not isinstance(other, Number):
             return NotImplemented
 
-        # Variance formula for interval base with non-interval exponent:
+        # Variance formula for ± interval base with non-interval exponent:
         # (x ± δx)^n = x^n ± |n| * |x^(n-1)| * δx
-        if self.is_interval() and not other.is_interval():
+        if self.is_interval() and not other.is_interval() and self.is_plusminus():
             a_mid = self.midpoint_value()
             a_unc = self.uncertainty_value()
             exp = other.to_float()
