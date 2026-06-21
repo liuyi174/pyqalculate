@@ -288,3 +288,60 @@ class TestExpressionEvaluation:
         for y in data.y_values:
             assert not math.isnan(y)
             assert not math.isinf(y)
+
+
+# ---------------------------------------------------------------------------
+# PlotFunction Calculator Integration
+# ---------------------------------------------------------------------------
+
+
+class TestPlotFunctionIntegration:
+    """Test PlotFunction integration via Calculator."""
+
+    def test_plot_function_registered(self, calc: Calculator) -> None:
+        """PlotFunction should be registered as 'plot' in the calculator."""
+        func = calc.get_function("plot")
+        assert func is not None
+        assert func.name() == "plot"
+
+    def test_plot_function_id(self, calc: Calculator) -> None:
+        """PlotFunction should have id FUNCTION_ID_PLOT (2690)."""
+        func = calc.get_function("plot")
+        assert func is not None
+        assert func.id() == 2690
+
+    @skip_no_matplotlib
+    def test_plot_from_calculator(self, calc: Calculator, tmp_dir: str) -> None:
+        """calc.calculate('plot(x^2, -5, 5, ...)') should produce a file."""
+        # Use forward slashes — Windows accepts them and parser doesn't eat them
+        filepath = tmp_dir.replace("\\", "/") + "/calc_plot.png"
+        result = calc.calculate_and_print(f'plot(x^2, -5, 5, "{filepath}")')
+        assert result == filepath
+        assert os.path.exists(filepath)
+        assert os.path.getsize(filepath) > 0
+
+    @skip_no_matplotlib
+    def test_plot_from_calculator_trig(self, calc: Calculator, tmp_dir: str) -> None:
+        """plot(sin(x), 0, 6.28, ...) should produce a file."""
+        filepath = tmp_dir.replace("\\", "/") + "/trig_plot.png"
+        result = calc.calculate_and_print(f'plot(sin(x), 0, 6.28, "{filepath}")')
+        assert result == filepath
+        assert os.path.exists(filepath)
+
+    @skip_no_matplotlib
+    def test_plot_no_filename_displays(self, calc: Calculator) -> None:
+        """plot(x^2, -5, 5) without filename returns 'Plot displayed' or file path."""
+        # Without a filename, matplotlib either displays interactively or returns empty
+        result = calc.calculate_and_print("plot(x^2, -5, 5)")
+        # Should return either "Plot displayed" or a file path (auto-generated)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_plot_function_copy(self, calc: Calculator) -> None:
+        """PlotFunction.copy() should return an independent copy."""
+        func = calc.get_function("plot")
+        assert func is not None
+        copy = func.copy()
+        assert copy is not func
+        assert copy.name() == "plot"
+        assert copy.id() == 2690

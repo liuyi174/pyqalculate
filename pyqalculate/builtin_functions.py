@@ -3347,6 +3347,65 @@ class EvenFunction(MathFunction):
     def copy(self): return EvenFunction()
 
 
+class PlotFunction(MathFunction):
+    """Plot a mathematical expression.
+
+    Usage: plot(expression, x_min, x_max[, filename])
+
+    Plots the given expression over the range [x_min, x_max].
+    If filename is provided, saves to file; otherwise displays interactively.
+
+    Examples:
+        plot(x^2, -5, 5)
+        plot(sin(x), 0, 2*pi, "sine.png")
+    """
+
+    def __init__(self):
+        super().__init__("plot", 1, 4, "Utility", "Plot function")
+        self.set_argument_definition(0, SymbolicArgument("expression"))
+        self.set_argument_definition(1, NumberArgument("x_min", does_test=False))
+        self.set_argument_definition(2, NumberArgument("x_max", does_test=False))
+        self.set_argument_definition(3, TextArgument("filename", does_test=False))
+
+    def id(self) -> int:
+        return FUNCTION_ID_PLOT
+
+    def calculate(self, vargs, eo=None):
+        from pyqalculate.math_structure import MathStructure
+
+        # Extract expression as string
+        expr_str = str(vargs[0]) if len(vargs) > 0 else "x"
+        # Convert MathStructure notation to Python math notation
+        expr_str = expr_str.replace("^", "**")
+
+        # Extract x range
+        x_min = _float_val(vargs[1]) if len(vargs) > 1 and _is_num(vargs[1]) else -10.0
+        x_max = _float_val(vargs[2]) if len(vargs) > 2 and _is_num(vargs[2]) else 10.0
+
+        # Extract filename
+        filename = str(vargs[3]) if len(vargs) > 3 else ""
+
+        try:
+            from pyqalculate.plot import Plotter
+            plotter = Plotter()
+            result_path = plotter.plot(expr_str, x_min=x_min, x_max=x_max, filename=filename)
+
+            if result_path:
+                return MathStructure.from_symbol(result_path)
+            else:
+                return MathStructure.from_symbol("Plot displayed")
+        except ImportError:
+            return MathStructure.from_symbol(
+                "Error: matplotlib is required for plotting. "
+                "Install with: pip install matplotlib"
+            )
+        except Exception as e:
+            return MathStructure.from_symbol(f"Plot error: {e}")
+
+    def copy(self):
+        return PlotFunction()
+
+
 # ============================================================================
 # FunctionRegistry
 # ============================================================================
@@ -3575,5 +3634,6 @@ def get_default_registry() -> FunctionRegistry:
         _default_registry.register(IsIntegerFunction())
         _default_registry.register(OddFunction())
         _default_registry.register(EvenFunction())
+        _default_registry.register(PlotFunction())
 
     return _default_registry
