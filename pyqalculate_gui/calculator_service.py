@@ -108,3 +108,39 @@ class CalculatorService:
         if abbrev and abbrev != name:
             return f"{name} ({abbrev})"
         return name
+
+    # ------------------------------------------------------------------
+    # CSV operations
+    # ------------------------------------------------------------------
+
+    def import_csv(
+        self,
+        filename: str,
+        first_row: int = 1,
+        headers: bool = True,
+        delimiter: str = ",",
+        to_matrix: bool = True,
+        name: str = "csv_data",
+    ):
+        """Import a CSV file and return the resulting MathStructure."""
+        return self._calc.importCSV(
+            filename=filename,
+            first_row=first_row,
+            headers=headers,
+            delimiter=delimiter,
+            to_matrix=to_matrix,
+            name=name,
+        )
+
+    def export_csv(
+        self,
+        mstruct,
+        filename: str,
+        delimiter: str = ",",
+    ) -> bool:
+        """Export a MathStructure to CSV file. Returns True on success."""
+        return self._calc.exportCSV(mstruct, filename, delimiter=delimiter)
+
+    def get_variable(self, name: str):
+        """Get a variable by name, or None if not found."""
+        return self._calc.get_variable(name)

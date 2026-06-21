@@ -173,7 +173,7 @@ class ExportCsvDialog(ModalDialog):
                     parent=self._dialog,  # type: ignore[arg-type]
                 )
                 return
-            var = self._calc._calc.get_variable(var_name)
+            var = self._calc.get_variable(var_name)
             if var is None:
                 messagebox.showerror(
                     "Error", f"Variable '{var_name}' not found.",
@@ -196,7 +196,7 @@ class ExportCsvDialog(ModalDialog):
             return
 
         try:
-            success = self._calc._calc.exportCSV(mstruct, filename, delimiter=delimiter)  # type: ignore[union-attr]
+            success = self._calc.export_csv(mstruct, filename, delimiter=delimiter)
             if success:
                 messagebox.showinfo(
                     "Export Successful",

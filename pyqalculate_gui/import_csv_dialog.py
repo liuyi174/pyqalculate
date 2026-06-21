@@ -175,7 +175,7 @@ class ImportCsvDialog(ModalDialog):
             return
 
         try:
-            result = self._calc._calc.importCSV(
+            result = self._calc.import_csv(
                 filename=filename,
                 first_row=first_row,
                 headers=headers,
