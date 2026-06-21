@@ -1513,6 +1513,37 @@ class MathStructure:
         elif node._type == StructureType.INVERSE and node._children:
             MathStructure._collect_unit_sources(node._children[0], acc)
 
+    @staticmethod
+    def _extract_numeric_coefficient(node: "MathStructure") -> float:
+        """Extract the numeric coefficient from a factor containing units.
+
+        Walks the expression tree and multiplies all NUMBER nodes, applying
+        sign inversion for INVERSE nodes, while treating UNIT and
+        POWER(UNIT, exp) nodes as coefficient 1.
+
+        Examples:
+            INVERSE(MULTIPLICATION(12, min)) → 1/12 ≈ 0.08333
+            MULTIPLICATION(3.5, mi)          → 3.5
+            INVERSE(UNIT(min))               → 1.0
+        """
+        if node._type == StructureType.NUMBER:
+            return node._number.to_float() if node._number is not None else 1.0
+        if node._type == StructureType.MULTIPLICATION:
+            result = 1.0
+            for c in node._children:
+                result *= MathStructure._extract_numeric_coefficient(c)
+            return result
+        if node._type == StructureType.INVERSE and node._children:
+            inner = MathStructure._extract_numeric_coefficient(node._children[0])
+            return 1.0 / inner if inner != 0 else 1.0
+        if node._type == StructureType.UNIT:
+            return 1.0
+        if node._type == StructureType.POWER and len(node._children) == 2:
+            # POWER(UNIT, exp) — unit power, numeric coeff is 1.0
+            if node._children[0]._type == StructureType.UNIT:
+                return 1.0
+        return 1.0
+
     def _simplify_unit_mul(self) -> "MathStructure | None":
         """Simplify a multiplication that contains units.
 
@@ -1566,6 +1597,12 @@ class MathStructure:
                     unit_exponents[name] = unit_exponents.get(name, 0.0) + exp_val
                 # Collect original unit objects to preserve alias chains
                 self._collect_unit_sources(f, unit_sources)
+                # Also extract numeric coefficients hidden inside this factor.
+                # e.g., INVERSE(MULTIPLICATION(12, min)) has a 12 that
+                # _extract_unit_exponents ignores but must be preserved.
+                num_coeff = self._extract_numeric_coefficient(f)
+                if abs(num_coeff - 1.0) > 1e-15:
+                    numeric_parts.append(MathStructure.from_number(Number(num_coeff)))
             else:
                 other_parts.append(f)
 

@@ -1545,12 +1545,23 @@ class Calculator:
         if from_unit is None:
             # Fallback: when the value is numeric (no unit) and the target unit
             # is an alias with a DIFFERENT base unit, try interpreting the value
-            # as being in the base unit. This handles "to eV" (base=J) but NOT
-            # "to m" (base=m, same unit).
+            # as being in the root base unit. Walk the base_unit chain to find
+            # the ultimate non-alias unit (e.g., ft→hand→in→m gives "m").
             if evaluated_value.is_number():
                 num_value = evaluated_value.float_value()
                 if hasattr(target_unit, 'base_unit'):
                     base = target_unit.base_unit()
+                    # Walk the chain to the root base unit
+                    visited_ids: set[int] = set()
+                    while (base is not None
+                           and base is not target_unit
+                           and id(base) not in visited_ids
+                           and hasattr(base, 'base_unit')):
+                        visited_ids.add(id(base))
+                        next_base = base.base_unit()
+                        if next_base is None or next_base is base:
+                            break
+                        base = next_base
                     if base is not None and base is not target_unit:
                         from_unit = base
             if from_unit is None:
@@ -1816,6 +1827,12 @@ class Calculator:
                         unit_parts.append((sub_unit, -1))
                     if sub_num != 1.0:
                         num_value /= sub_num
+            elif (child.type == ST.POWER and len(child) == 2
+                  and child[0].is_unit() and child[0].unit is not None
+                  and child[1].is_number()):
+                # POWER(UNIT, number) — e.g., POWER(s, -1) from interval eval
+                exp_val = child[1].float_value()
+                unit_parts.append((child[0].unit, int(round(exp_val))))
             elif child.is_multiplication():
                 # Nested multiplication (e.g., 100*m inside 100*m/s)
                 sub_num, sub_unit = self._extract_value_and_unit(child)

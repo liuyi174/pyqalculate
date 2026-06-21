@@ -402,6 +402,88 @@ def _is_corrupted_reference(expected: str, actual: str) -> bool:
     return False
 
 
+def _try_sympy_numeric_eval(s: str) -> float | None:
+    """Try to evaluate any expression to a float using sympy.
+
+    Handles symbolic expressions like 'sqrt(pi)', '1/2 * pi',
+    and fractions like '13/7'.
+    """
+    if not _HAS_SYMPY:
+        return None
+    s_str = _qalculate_to_sympy_str(s)
+    transformations = standard_transformations + (implicit_multiplication_application,)
+    local_dict = {
+        'e': sympy.E, 'pi': sympy.pi, 'E': sympy.E,
+        'sqrt': sympy.sqrt, 'erf': sympy.erf,
+    }
+
+    def _try_parse_and_eval(expr_str: str) -> float | None:
+        try:
+            expr = _sympy_parse(expr_str, local_dict=local_dict, transformations=transformations)
+            val = sympy.N(expr)
+            if val.is_finite:
+                return float(val)
+        except Exception:
+            pass
+        try:
+            expr = sympy.sympify(expr_str, locals=local_dict)
+            val = sympy.N(expr)
+            if val.is_finite:
+                return float(val)
+        except Exception:
+            pass
+        return None
+
+    return _try_parse_and_eval(s_str)
+
+
+def _compare_matrix_numeric(actual: str, expected: str) -> bool:
+    """Compare matrix/vector elements when they contain fractions vs decimals.
+
+    E.g., [13/7 17/7 12/7] vs [1.857142857 2.428571429 1.714285714]
+    """
+    def parse_matrix_elements(s: str) -> list[str]:
+        """Extract elements from matrix notation like [a b c; d e f] or [a b c]."""
+        s = s.strip()
+        if not s.startswith('[') or not s.endswith(']'):
+            return []
+        inner = s[1:-1]
+        elements = re.split(r'[;,\s]+', inner)
+        return [e for e in elements if e]
+
+    actual_elems = parse_matrix_elements(actual)
+    expected_elems = parse_matrix_elements(expected)
+
+    if not actual_elems or not expected_elems:
+        return False
+    if len(actual_elems) != len(expected_elems):
+        return False
+
+    for a, e in zip(actual_elems, expected_elems):
+        # Always try sympy evaluation first for symbolic elements (e.g., "13/7")
+        a_num = _try_sympy_numeric_eval(a) if _HAS_SYMPY else None
+        e_num = _try_sympy_numeric_eval(e) if _HAS_SYMPY else None
+
+        # Fall back to plain numeric extraction for pure decimals
+        if a_num is None:
+            a_num = extract_numeric(a)
+        if e_num is None:
+            e_num = extract_numeric(e)
+
+        if a_num is None or e_num is None:
+            return False
+
+        if e_num == 0:
+            if abs(a_num) > 1e-6:
+                return False
+        else:
+            rel_diff = abs(a_num - e_num) / abs(e_num)
+            if rel_diff > NUMERIC_TOLERANCE:
+                return False
+
+    return True
+
+
 def _is_known_constant_value(s: str) -> bool:
     """Check if string is a well-known mathematical constant."""
     return s.strip().lower() in ('e', 'pi', 'π', 'inf', 'infinity', 'oo')
@@ -438,6 +520,8 @@ def compare_results(actual: str, expected: str, expression: str = "") -> bool:
     2. Corrupted reference detection (accept actual if ref is garbled)
     3. SymPy symbolic comparison (canonical form)
     4. Numeric tolerance match (±0.5% relative)
+    4b. Symbolic-to-numeric comparison (sympy eval of symbolic exprs)
+    4c. Matrix element-wise numeric comparison (fractions vs decimals)
     5. SI prefix value comparison (constants with unit prefixes)
     6. Matrix format normalization + comparison
     7. Substring match
@@ -474,6 +558,26 @@ def compare_results(actual: str, expected: str, expression: str = "") -> bool:
             rel_diff = abs(actual_num - expected_num) / abs(expected_num)
             if rel_diff < NUMERIC_TOLERANCE:
                 return True
+
+    # 4b. Symbolic-to-numeric comparison (evaluate symbolic exprs numerically)
+    #     Handles cases like sqrt(pi) vs 1.772453851, or 1/2*pi vs 1.570796327
+    if _HAS_SYMPY:
+        if expected_num is not None:
+            actual_sympy_num = _try_sympy_numeric_eval(actual_norm)
+            if actual_sympy_num is not None:
+                if expected_num == 0:
+                    if abs(actual_sympy_num) < 1e-6:
+                        return True
+                else:
+                    rel_diff = abs(actual_sympy_num - expected_num) / abs(expected_num)
+                    if rel_diff < NUMERIC_TOLERANCE:
+                        return True
+
+    # 4c. Matrix element-wise numeric comparison (fractions vs decimals)
+    #     Handles cases like [13/7 17/7 12/7] vs [1.857142857 2.428571429 1.714285714]
+    if actual_norm.startswith('[') and expected_norm.startswith('['):
+        if _compare_matrix_numeric(actual_norm, expected_norm):
+            return True
 
     # 5. SI prefix value comparison (e.g., "9.2740101 yA*m^2" vs "9.2740101e-24")
     si_actual = _resolve_si_value(actual_norm)
