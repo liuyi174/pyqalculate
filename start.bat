@@ -49,7 +49,7 @@ if not exist ".venv" (
         exit /b 1
     )
 
-    echo Installing extras (matplotlib, sympy, gmpy2)...
+    echo Installing extras: matplotlib, sympy, gmpy2...
     pip install matplotlib sympy gmpy2 -q
 
     echo.
