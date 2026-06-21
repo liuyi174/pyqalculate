@@ -53,8 +53,7 @@ SI_PREFIX_MAP: dict[str, float] = {
 # ---------------------------------------------------------------------------
 
 SKIP_PATTERNS: list[str] = [
-    # cbrt() of negative numbers returns symbolic form
-    r"\bcbrt\s*\(\s*-\d+\s*\)",
+    # cbrt(-27) now returns -3 correctly, no skip needed
 ]
 
 
@@ -183,13 +182,8 @@ def should_skip(test: ReferenceTest) -> tuple[bool, str]:
             return True, f"unsupported pattern: {pattern}"
 
     # Check the expected result for patterns we can't compare
-    # Complex numbers with 'i' suffix
-    if re.search(r"[\d.]i\b", expected):
-        return True, "complex number result"
-
-    # Uncertainty in result
-    if "±" in expected or "+/-" in expected or "\u00b1" in expected:
-        return True, "uncertainty in result"
+    # Complex numbers - now supported, no longer skip
+    # Uncertainty - now supported via interval arithmetic, no longer skip
 
     return False, ""
 
@@ -398,6 +392,12 @@ def _is_corrupted_reference(expected: str, actual: str) -> bool:
         return True
     # Unevaluated function syntax (e.g., "100 * days()")
     if re.search(r'\d+\s*\*\s*\w+\(\)', expected):
+        return True
+    # Garbled characters (corrupted encoding, e.g., 卤 instead of ±)
+    if re.search(r'[卤\ufffd]', expected):
+        return True
+    # Unevaluated symbolic references (e.g., planet("moon", "mass"))
+    if re.search(r'planet\s*\(', expected):
         return True
     return False
 
