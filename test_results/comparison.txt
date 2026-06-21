@@ -1,5 +1,5 @@
 Initializing pyqalculate...
-Loaded 157 functions, 278 variables, 14766 units
+Loaded 158 functions, 278 variables, 14766 units
 
 Processing 01_basic_operations.txt...
   1.1 Nested roots... [OK]

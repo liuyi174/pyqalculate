@@ -4,7 +4,7 @@
 
 PyQalculate 是 libqalculate 的纯 Python 移植版本，包含核心数学引擎、CLI 和 GUI。
 
-**版本**: v2.1.2  
+**版本**: v2.2  
 **仓库**: https://github.com/anotlife/pyqalculate  
 **Python**: 3.8+  
 **依赖**: sympy, gmpy2 (可选), matplotlib (可选)
@@ -38,10 +38,19 @@ pyqalculate/
 │   ├── __main__.py             # python -m pyqalc 入口
 │   └── cli.py                  # CLI 实现 (602 行)
 │
-├── pyqalculate_gui/            # GUI 模块 (v2.2 重建中)
+├── pyqalculate_gui/            # GUI 模块 (v2.2)
 │   ├── __init__.py
 │   ├── __main__.py             # python -m pyqalculate_gui 入口
-│   ├── main_window.py          # 主窗口 (235 行)
+│   ├── main_window.py          # 主窗口 (501 行)
+│   ├── expression_edit.py      # 表达式输入 (216 行)
+│   ├── result_view.py          # 结果显示 (163 行)
+│   ├── history_view.py         # 历史记录 (272 行)
+│   ├── keypad.py               # 虚拟键盘 (281 行)
+│   ├── conversion_view.py      # 单位转换 (394 行)
+│   ├── plot_dialog.py          # 绘图对话框 (560 行)
+│   ├── preferences_dialog.py   # 偏好设置 (502 行)
+│   ├── import_csv_dialog.py    # CSV 导入 (221 行)
+│   ├── export_csv_dialog.py    # CSV 导出 (236 行)
 │   ├── input_widget.py         # 输入组件 (136 行)
 │   ├── result_widget.py        # 结果显示 (143 行)
 │   ├── plot_widget.py          # 绘图组件 (204 行)
@@ -67,11 +76,18 @@ pyqalculate/
 │   └── test_qalculate_reference.py  # 参考测试 (79 个)
 │
 ├── docs/                       # 文档
-│   ├── development/            # 开发文档
+│   ├── README.md               # 文档索引
+│   ├── plans/                  # 开发计划（过程文档）
+│   │   ├── DEVELOPMENT_PLAN_V1.md
+│   │   ├── DEVELOPMENT_PLAN_V2.md
+│   │   ├── DEVELOPMENT_PLAN_V2.1.md
+│   │   ├── DEVELOPMENT_PLAN_V2.1.1.md
+│   │   ├── DEVELOPMENT_PLAN_V2.1.2.md
+│   │   └── DEVELOPMENT_PLAN_V2.2.md
+│   ├── standards/              # 编码规范（产品文档）
 │   │   ├── PROJECT_STRUCTURE.md
-│   │   ├── INTERFACE_SPEC.md
 │   │   └── CODING_GUIDELINES.md
-│   └── gui_analysis/           # GUI 分析文档
+│   └── analysis/               # GUI 分析（产品文档）
 │       ├── mainwindow.md
 │       ├── expression_edit.md
 │       ├── result_view.md
@@ -79,6 +95,7 @@ pyqalculate/
 │       ├── keypad_analysis.md
 │       ├── conversionview_analysis.md
 │       ├── menu_dialog_system_analysis.md
+│       ├── buttonseditdialog_analysis.md
 │       └── overview.md
 │
 ├── cli.py                      # CLI 入口脚本
@@ -92,14 +109,8 @@ pyqalculate/
 ├── pyproject.toml              # 项目配置
 ├── pytest.ini                  # pytest 配置
 ├── README.md                   # 项目说明
-├── LICENSE                     # MIT 许可证
-│
-├── DEVELOPMENT_PLAN.md         # v1.0 开发计划
-├── DEVELOPMENT_PLAN_V2.md      # v2.0 开发计划
-├── DEVELOPMENT_PLAN_V2.1.md    # v2.1 开发计划
-├── DEVELOPMENT_PLAN_V2.1.1.md  # v2.1.1 开发计划
-├── DEVELOPMENT_PLAN_V2.1.2.md  # v2.1.2 开发计划
-└── DEVELOPMENT_PLAN_V2.2.md    # v2.2 开发计划 (GUI 重建)
+└── LICENSE                     # MIT 许可证
+
 ```
 
 ---
@@ -555,7 +566,7 @@ twine upload dist/*
 | v2.1 | 2026-06 | 79/79 参考测试通过 |
 | v2.1.1 | 2026-06 | 区间算术、相关系数修正 |
 | v2.1.2 | 2026-06 | 绘图集成 |
-| v2.2 | 开发中 | GUI 重建、CSV 支持 |
+| v2.2 | 2026-06 | GUI 重建、CSV 支持、完整测试通过 |
 
 ---
 
