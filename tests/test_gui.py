@@ -5,8 +5,8 @@ import os
 
 def test_import():
     """Test GUI module can be imported."""
-    from pyqalculate_gui.main_window import CalculatorApp
-    assert CalculatorApp is not None
+    from pyqalculate_gui.main_window import MainWindow
+    assert MainWindow is not None
 
 
 def test_calculator_integration():
@@ -65,9 +65,9 @@ def test_calculator_approximate_mode():
 def test_gui_creation():
     """Test GUI can be created (requires display)."""
     import tkinter as tk
-    from pyqalculate_gui.main_window import CalculatorApp
+    from pyqalculate_gui.main_window import MainWindow
 
-    app = CalculatorApp()
-    assert app.root is not None
-    assert app.root.title() == "PyQalculate"
-    app.root.destroy()
+    app = MainWindow()
+    assert app._root is not None
+    assert app._root.title() == "PyQalculate"
+    app._root.destroy()
