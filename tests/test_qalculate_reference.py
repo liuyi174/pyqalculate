@@ -54,6 +54,10 @@ SI_PREFIX_MAP: dict[str, float] = {
 
 SKIP_PATTERNS: list[str] = [
     # cbrt(-27) now returns -3 correctly, no skip needed
+    # SKIPPED: uncertainty/interval arithmetic not implemented in Python bindings
+    # pyqalculate does not support +/- notation or interval() function yet
+    r'\+/-',           # uncertainty propagation syntax, e.g. (5+/-0.1)*(3+/-0.2)
+    r'interval\(',     # interval arithmetic, e.g. interval(-3; 7)^3
 ]
 
 
