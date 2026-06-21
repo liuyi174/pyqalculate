@@ -31,6 +31,7 @@ from pyqalculate_gui.plot_dialog import PlotDialog
 from pyqalculate_gui.preferences_dialog import PreferencesDialog
 from pyqalculate_gui.import_csv_dialog import ImportCsvDialog
 from pyqalculate_gui.export_csv_dialog import ExportCsvDialog
+from pyqalculate_gui.event_bus import EventBus, HISTORY_RECALLED
 
 
 class MainWindow:
@@ -200,13 +201,19 @@ class MainWindow:
         self._result_view = ResultView(self._paned)
         self._paned.add(self._result_view, weight=3)
 
+        # Event bus for decoupled communication
+        self._event_bus = EventBus()
+
         # History view (right)
         self._history_frame = ttk.Frame(self._paned)
         self._history_view = HistoryView(
-            self._history_frame, on_recall=self._on_history_recall
+            self._history_frame, event_bus=self._event_bus,
         )
         self._history_view.pack(fill=tk.BOTH, expand=True)
         self._paned.add(self._history_frame, weight=1)
+
+        # Subscribe to history recall events
+        self._event_bus.subscribe(HISTORY_RECALLED, self._on_history_recall)
 
         # Conversion panel (togglable, initially hidden)
         self._conversion_frame = ttk.Frame(self._paned)
