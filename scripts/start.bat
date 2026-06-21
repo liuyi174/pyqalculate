@@ -28,12 +28,12 @@ for /f "tokens=*" %%i in ('python --version 2^>^&1') do echo Found %%i
 
 :: Check virtual environment
 echo [2/2] Checking virtual environment...
-if not exist ".venv" (
+if not exist "..\.venv" (
     echo Creating virtual environment...
     echo.
 
     echo Creating .venv...
-    python -m venv .venv
+    python -m venv ..\.venv
     if errorlevel 1 (
         echo Failed to create .venv!
         pause
@@ -41,8 +41,8 @@ if not exist ".venv" (
     )
 
     echo Installing dependencies...
-    call .venv\Scripts\activate.bat
-    pip install -e . -q
+    call ..\.venv\Scripts\activate.bat
+    pip install -e .. -q
     if errorlevel 1 (
         echo Failed to install dependencies!
         pause
@@ -56,7 +56,7 @@ if not exist ".venv" (
     echo Setup complete!
 ) else (
     echo Virtual environment found.
-    call .venv\Scripts\activate.bat
+    call ..\.venv\Scripts\activate.bat
 )
 
 echo.

@@ -55,3 +55,7 @@ Thumbs.db
 
 # Build
 *.egg-info/
+
+# Output directories
+demo_output/
+test_results/
