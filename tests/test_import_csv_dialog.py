@@ -289,13 +289,15 @@ def test_show_and_ok_no_file() -> None:
         dlg = ImportCsvDialog(root)
 
         def click_ok_then_cancel():
-            # _on_ok will show error messagebox; dismiss it, then cancel
-            dlg._on_ok()
+            # Mock messagebox to avoid real popup, but verify it was called
+            with patch.object(messagebox, "showerror") as mock_err:
+                dlg._on_ok()
+                mock_err.assert_called_once()
+                assert "CSV file" in mock_err.call_args[0][1]
             dlg._on_cancel()
 
         root.after(50, click_ok_then_cancel)
         dlg.show()
-        # The error messagebox blocks, so click_ok_then_cancel finishes after
         # The dialog closes via _on_cancel
         assert dlg.get_result() is False
     finally:

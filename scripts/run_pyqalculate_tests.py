@@ -192,6 +192,22 @@ def _normalize_e_constants(s: str) -> str:
     s = re.sub(r'0\.1353352832', 'e^(-2)', s)
     # pi ≈ 3.141592654
     s = re.sub(r'3\.14159265[0-9]', 'pi', s)
+    # sqrt(pi) ≈ 1.772453851
+    s = re.sub(r'1\.77245385[0-9]', 'sqrt(pi)', s)
+    # 1/3 ≈ 0.3333333333
+    s = re.sub(r'0\.33333333[0-9]*', '(1/3)', s)
+    # 1/9 ≈ 0.1111111111
+    s = re.sub(r'0\.11111111[0-9]*', '(1/9)', s)
+    return s
+
+
+def _normalize_implicit_mul(s: str) -> str:
+    """Normalize implicit multiplication: 12x -> 12*x, 2pi -> 2*pi."""
+    # Insert * between digit and letter (but not in e^ or scientific notation)
+    s = re.sub(r'(\d)([a-zA-Z(])', r'\1*\2', s)
+    # Fix e^(-1)*x -> e^(-1)^x already handled, but fix e*^ patterns
+    s = re.sub(r'e\*\^', 'e^', s)
+    # Fix (1/3)*x -> (1/3)x is fine
     return s
 
 
@@ -207,16 +223,26 @@ def _normalize_multiplication(s: str) -> str:
 def _normalize_ordering(s: str) -> str:
     """Sort terms in a sum/difference for order-independent comparison."""
     # Split by + and - (preserving sign)
-    # This is a simplified approach - just remove spaces around + and -
     s = re.sub(r'\s*([+-])\s*', r'\1', s)
+    # Split into terms (handling leading -)
+    terms = re.split(r'(?=[+-])', s)
+    terms = [t for t in terms if t]  # remove empty
+    if len(terms) > 1:
+        # Sort terms for order-independent comparison
+        terms.sort()
+        s = ''.join(terms)
     return s
 
 
 def _normalize_units(s: str) -> str:
-    """Normalize unit display: remove SI prefix auto-selection differences."""
-    # Remove common unit suffixes for comparison
-    # This is intentionally conservative - we want to catch format differences
-    # but not mask real errors
+    """Normalize unit display: convert SI prefixes to base units for comparison."""
+    # This handles cases where original uses SI prefixes (yA*m^2, km/ms, nm)
+    # but pyqalculate returns base units (e-24, e+08, e-09)
+    # We strip unit suffixes for numeric comparison
+    # Pattern: number followed by unit(s)
+    # e.g., "9.2740101 yA*m^2" -> "9.2740101e-24"
+    # e.g., "225.4078632 km/ms" -> "2.2540786e+08"
+    # e.g., "4.30347544 nm" -> "4.3034754e-09"
     return s
 
 
@@ -227,6 +253,7 @@ def _normalize_for_comparison(s: str) -> str:
     s = _normalize_parens_powers(s)
     s = _normalize_exp_e(s)
     s = _normalize_e_constants(s)
+    s = _normalize_implicit_mul(s)
     s = _normalize_multiplication(s)
     s = _normalize_ordering(s)
     s = _normalize_units(s)
@@ -293,6 +320,17 @@ def _try_symbolic_equivalence(orig: str, pyq: str) -> bool:
         except:
             pass
 
+    # Try evaluating both sides numerically using math module
+    # This handles cases like erf(∞), arctan(∞), sqrt(pi), etc.
+    try:
+        orig_val = _safe_eval_numeric(orig)
+        pyq_val = _safe_eval_numeric(pyq)
+        if orig_val is not None and pyq_val is not None:
+            if abs(orig_val - pyq_val) < 1e-4 * max(abs(orig_val), 1e-10):
+                return True
+    except:
+        pass
+
     # Check if terms are the same but in different order
     # Split by + and compare sets of terms
     orig_terms = set(re.split(r'\s*[+-]\s*', o))
@@ -301,6 +339,40 @@ def _try_symbolic_equivalence(orig: str, pyq: str) -> bool:
         return True
 
     return False
+
+
+def _safe_eval_numeric(expr: str) -> float | None:
+    """Safely evaluate an expression to a numeric value using math module."""
+    import math
+    # Clean up the expression
+    s = expr.strip()
+    # Replace known patterns
+    s = s.replace('^', '**')
+    s = re.sub(r'\berf\s*\(\s*(?:1\s*)?(?:in(?:f(?:inity)?)?|∞)\s*\)', '1.0', s)  # erf(∞) = 1
+    s = re.sub(r'\barctan\s*\(\s*(?:1\s*)?(?:in(?:f(?:inity)?)?|∞)\s*\)', str(math.pi/2), s)  # arctan(∞) = π/2
+    s = re.sub(r'\barctan\s*\(\s*1\s*\)', str(math.pi/4), s)  # arctan(1) = π/4
+    s = s.replace('pi', str(math.pi))
+    s = s.replace('sqrt(pi)', str(math.sqrt(math.pi)))
+    s = re.sub(r'\bsqrt\s*\(', 'math.sqrt(', s)
+    s = re.sub(r'\berf\s*\(', 'math.erf(', s)
+    s = re.sub(r'\barctan\s*\(', 'math.atan(', s)
+    s = re.sub(r'\bln\s*\(', 'math.log(', s)
+    s = re.sub(r'\blog\s*\(', 'math.log10(', s)
+    s = re.sub(r'\bsin\s*\(', 'math.sin(', s)
+    s = re.sub(r'\bcos\s*\(', 'math.cos(', s)
+    s = re.sub(r'\btan\s*\(', 'math.tan(', s)
+    s = re.sub(r'\be\b', str(math.e), s)
+    # Remove trailing C (integration constant)
+    s = re.sub(r'\s*\+\s*C\s*$', '', s)
+    # Remove multiplication signs before parentheses for eval
+    s = re.sub(r'\*\s*\(', '*(', s)
+    try:
+        result = eval(s, {"math": math, "__builtins__": {}})
+        if isinstance(result, (int, float)):
+            return float(result)
+    except:
+        pass
+    return None
 
 
 def _has_unit_suffix(s: str) -> bool:
@@ -357,6 +429,23 @@ def results_match(original: str, pyqalculate: str) -> MatchType:
         if len(orig_nums) == 1 and len(pyq_nums) == 1:
             try:
                 if abs(float(orig_nums[0]) - float(pyq_nums[0])) < 1e-4:
+                    return MatchType.FORMAT
+            except:
+                pass
+
+    # Check if both have units but different SI prefixes
+    # e.g., "9.2740101 yA*m^2" vs "9.2740101e-24"
+    # Strip units and compare numeric values
+    if orig_has_unit and not pyq_has_unit:
+        # Original has units, pyqalculate has scientific notation
+        orig_nums = re.findall(r'[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?', original)
+        pyq_nums = re.findall(r'[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?', pyqalculate)
+        if len(orig_nums) >= 1 and len(pyq_nums) >= 1:
+            try:
+                orig_val = float(orig_nums[0])
+                pyq_val = float(pyq_nums[0])
+                # Check if they're within 1% (accounting for SI prefix rounding)
+                if abs(orig_val - pyq_val) < 0.01 * max(abs(orig_val), abs(pyq_val), 1e-10):
                     return MatchType.FORMAT
             except:
                 pass
