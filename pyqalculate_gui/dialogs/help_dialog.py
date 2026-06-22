@@ -84,7 +84,7 @@ class HelpDialog(ModalDialog):
             links_frame,
             text="GitHub: github.com/anotlife/pyqalculate",
             font=self._theme.info_font,
-            foreground="blue",
+            foreground=self._theme.result_fg,
             cursor="hand2",
         )
         github_label.pack(anchor=tk.W)
