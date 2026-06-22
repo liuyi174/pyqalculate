@@ -2,12 +2,12 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-title PyQalculate v2.1.2
+title PyQalculate v3.0.0
 cd /d "%~dp0"
 
 echo.
 echo ========================================
-echo   PyQalculate v2.1.2 - Python Calculator
+echo   PyQalculate v3.0.0 - Python Calculator
 echo ========================================
 echo.
 
