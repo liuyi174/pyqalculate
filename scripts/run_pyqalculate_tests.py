@@ -228,9 +228,16 @@ def _normalize_ordering(s: str) -> str:
     terms = re.split(r'(?=[+-])', s)
     terms = [t for t in terms if t]  # remove empty
     if len(terms) > 1:
+        # Add + prefix to terms without sign
+        normalized = []
+        for t in terms:
+            if not t.startswith('+') and not t.startswith('-'):
+                normalized.append('+' + t)
+            else:
+                normalized.append(t)
         # Sort terms for order-independent comparison
-        terms.sort()
-        s = ''.join(terms)
+        normalized.sort()
+        s = ''.join(normalized)
     return s
 
 
@@ -376,8 +383,14 @@ def _safe_eval_numeric(expr: str) -> float | None:
 
 
 def _has_unit_suffix(s: str) -> bool:
-    """Check if result has a unit suffix."""
-    unit_pattern = r'\s+(m|s|kg|A|K|mol|cd|Hz|N|Pa|J|W|C|V|F|Ω|S|Wb|T|H|lm|lx|Bq|Gy|Sv|kat|eV|au|ly|pc|bar|atm|mmHg|torr|b|bit|B|byte|L|gal|ft|in|mi|nmi|knot| acre|ha|rad|deg|grad|sr|mol|%|ppm|ppb|dB|Np|mol/L|M)\b'
+    """Check if result has a unit suffix (including SI prefixed units)."""
+    # Base units and common derived units
+    base_units = r'm|s|g|A|K|mol|cd|Hz|N|Pa|J|W|C|V|F|Ω|S|Wb|T|H|lm|lx|Bq|Gy|Sv|kat|eV|au|ly|pc|bar|atm|mmHg|torr|bit|byte|L|gal|ft|in|mi|nmi|knot|acre|ha|rad|deg|grad|sr|%|ppm|ppb|dB|Np'
+    # SI prefixes
+    si_prefixes = r'y|z|a|f|p|n|u|μ|m|c|d|da|h|k|M|G|T|P|E|Z|Y'
+    # Match SI prefixed units or base units
+    # Pattern: space + (optional SI prefix) + unit + word boundary
+    unit_pattern = rf'\s+(?:{si_prefixes})?(?:{base_units})\b'
     return bool(re.search(unit_pattern, s, re.IGNORECASE))
 
 
