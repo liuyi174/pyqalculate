@@ -5,13 +5,14 @@ Processing 01_basic_operations.txt...
   1.1 Nested roots... [OK]
   1.2 Sum of sin^2+cos^2 (i=1..20)... [DIFF]
     Original:    20
-    PyQalculate: sum(sin(\i)**2 + cos(\i)**2, 1, 20, \i)
+    PyQalculate: - 19 + \i
   1.3 Combination C(20,5)... [OK]
   1.4 Integer division + modulo... [OK]
   1.5 Mixed fraction... [OK]
   1.7 Trig identity... [OK]
   1.8 Complex exponent... [OK]
   1.9 Hyperbolic... [OK]
+  => 7/8 matches (87.5%) (1 diff)
 
 Processing 02_unit_conversions.txt...
   2.1 Speed... [OK]
@@ -24,6 +25,7 @@ Processing 02_unit_conversions.txt...
   2.8 Force... [OK]
   2.9 Volume... [OK]
   2.10 Mass... [OK]
+  => 10/10 matches (100.0%)
 
 Processing 03_physical_constants.txt...
   3.1 Planck length... [OK]
@@ -40,6 +42,7 @@ Processing 03_physical_constants.txt...
   3.7 Thermal wavelength at 300K... [DIFF]
     Original:    4.30347544 nm
     PyQalculate: 4.3034754e-09
+  => 2/6 matches (33.3%) (4 diff)
 
 Processing 04_uncertainty_interval.txt...
   4.1 Multi-variable error propagation... [DIFF]
@@ -57,6 +60,7 @@ Processing 04_uncertainty_interval.txt...
   4.5 Pendulum period with uncertainty... [DIFF]
     Original:    2.457±0.041 s
     PyQalculate: 2.4978877 s
+  => 0/5 matches (0.0%) (5 diff)
 
 Processing 05_algebra_equations.txt...
   5.1 Polynomial factorization... [DIFF]
@@ -77,6 +81,7 @@ Processing 05_algebra_equations.txt...
     Original:    1 + 8x + 28x^2 + 56x^3 + 70x^4 + 56x^5 + 28x^6 + 8x^7 + x^8
     PyQalculate: 1 + (x)^(8) + 8 * x + 8 * (x)^(7) + 28 * (x)^(2) + 28 * (x)^(6) + 56 * (x)^(3) + 56 * (x)^(5) + 70 * (x)^(4)
   5.8 Symbolic GCD... [OK]
+  => 3/8 matches (37.5%) (5 diff)
 
 Processing 06_calculus.txt...
   6.1 Chain rule... [DIFF]
@@ -95,12 +100,13 @@ Processing 06_calculus.txt...
   6.6 Second derivative... [DIFF]
     Original:    12x^2 - 18x + 4
     PyQalculate: 4 - 18*x + 12 * (x)^(2)
-  6.7 Definite integral... [DIFF]
+  6.7 Definite integral... [DIFF] (format)
     Original:    1.570796327
     PyQalculate: 0.5 * pi
   6.8 Integral... [DIFF]
     Original:    2 * arctan(1 in)
     PyQalculate: pi
+  => 2/8 matches (25.0%) (1 format, 6 diff)
 
 Processing 07_matrices_vectors.txt...
   7.1 3x3 matrix multiplication... [OK]
@@ -111,16 +117,19 @@ Processing 07_matrices_vectors.txt...
   7.6 Hadamard product... [OK]
   7.7 Eigenvalues... [OK]
   7.8 Trace... [OK]
+  => 8/8 matches (100.0%)
 
 Processing 08_statistics.txt...
   8.1 Descriptive stats... [OK]
   8.4 Normal distribution... [OK]
   8.5 Correlation... [OK]
+  => 3/3 matches (100.0%)
 
 Processing 09_time_date.txt...
   9.1 Time addition... [OK]
   9.2 Time in hours... [OK]
   9.5 Date difference... [OK]
+  => 3/3 matches (100.0%)
 
 Processing 10_number_bases.txt...
   10.1 All bases... [OK]
@@ -133,15 +142,18 @@ Processing 10_number_bases.txt...
   10.8 Bitwise operations... [OK]
   10.9 Binary with bits... [OK]
   10.10 Base sqrt(2)... [OK]
+  => 10/10 matches (100.0%)
 
 ============================================================
-SUMMARY:
+OVERALL SUMMARY:
 ============================================================
 Total expressions: 69
-Matches: 47
-Differs: 22
-Errors: 0
-Match rate: 68.1%
+  Exact matches (OK): 47
+  Format matches (FORMAT): 1
+  Total matches: 48
+  Differs: 21
+  Errors: 0
+  Match rate: 69.6%
 
 Results saved to: D:\1\1tmp\pyqalculate_output
 Comparison summary: D:\1\1tmp\pyqalculate_output\comparison_summary.txt
