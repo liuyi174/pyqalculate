@@ -59,6 +59,14 @@ BUTTON_DEFS: list[list[_ButtonDef]] = [
 _STYLE_KEYS = {"digit", "op", "func", "action", "equals"}
 
 
+def _darken(hex_color: str, factor: float = 0.8) -> str:
+    """Return a darker version of *hex_color* (e.g. '#aabbcc')."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    r, g, b = int(r * factor), int(g * factor), int(b * factor)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 def _style_for_button(
     theme: Theme, style_key: str
 ) -> ButtonStyle:
@@ -108,7 +116,7 @@ class KeypadWidget(ttk.Frame):
                     font=style.font,
                     bg=style.bg,
                     fg=style.fg,
-                    activebackground=style.hover_bg,
+                    activebackground=_darken(style.bg),
                     relief=tk.FLAT,
                     borderwidth=0,
                     highlightthickness=0,
@@ -168,5 +176,5 @@ class KeypadWidget(ttk.Frame):
                             bg=style.bg,
                             fg=style.fg,
                             font=style.font,
-                            activebackground=style.hover_bg,
+                            activebackground=_darken(style.bg),
                         )

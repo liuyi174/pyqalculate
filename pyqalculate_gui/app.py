@@ -132,7 +132,7 @@ class App:
         self._keypad.pack(fill=tk.X, side=tk.BOTTOM, pady=(4, 0))
 
         # PanedWindow for history (bottom area)
-        self._paned = ttk.PanedWindow(main, orient=tk.HORIZONTAL)
+        self._paned = ttk.PanedWindow(main, orient=tk.HORIZONTAL, height=150)
         self._paned.pack(fill=tk.X, side=tk.BOTTOM, pady=(4, 0))
 
         self._history_view = HistoryView(
@@ -160,6 +160,8 @@ class App:
             state=self._state,
         )
         self._expr_edit.pack(fill=tk.X, side=tk.BOTTOM, pady=(0, 0))
+        self._expr_edit.pack_propagate(False)
+        self._expr_edit.configure(height=40)
 
         # Autocomplete popup — wired to expression edit's text widget
         self._autocomplete = AutoComplete(
@@ -385,7 +387,7 @@ class App:
         if self._keypad.winfo_viewable():
             self._keypad.pack_forget()
         else:
-            self._keypad.pack(fill=tk.X, pady=(0, 4), after=self._expr_edit)
+            self._keypad.pack(fill=tk.X, side=tk.BOTTOM, pady=(0, 4), after=self._expr_edit)
 
     def _on_toggle_history(self) -> None:
         """Show or hide the history pane inside the PanedWindow."""
