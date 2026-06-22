@@ -47,19 +47,20 @@ class PlotData:
         self.style: PlotStyle = PlotStyle.LINES
 
 
-def _eval_expression(expression: str, x_val: float) -> float:
-    """Evaluate a mathematical expression at a given x value.
+def _eval_expression(expression: str, x_val: float, var: str = "x") -> float:
+    """Evaluate a mathematical expression at a given value.
 
     Uses a safe namespace with common math functions.
 
     Args:
         expression: The expression string (e.g., "x^2 + sin(x)").
-        x_val: The x value to evaluate at.
+        x_val: The value to evaluate at (assigned to *var*).
+        var: The variable name to bind x_val to (default "x", use "t" for parametric).
 
     Returns:
-        The computed y value, or NaN on error.
+        The computed value, or NaN on error.
     """
-    ns = {**_SAFE_MATH_NS, "x": x_val}
+    ns = {**_SAFE_MATH_NS, var: x_val}
     # Convert ^ to ** for Python exponentiation
     expr = expression.replace("^", "**")
     try:
@@ -306,6 +307,115 @@ class Plotter:
             ax.set_ylim(bottom=params.y_min)
         if not params.auto_y_max:
             ax.set_ylim(top=params.y_max)
+
+    def plot_parametric(
+        self,
+        x_expr: str,
+        y_expr: str,
+        filename: str = "",
+        t_min: float = 0.0,
+        t_max: float = 6.283185307179586,
+        num_points: int = 1000,
+        title: str = "",
+    ) -> str:
+        """Plot a parametric curve x(t), y(t).
+
+        Args:
+            x_expr: Expression for x in terms of t (e.g., "(1+cos(t))*cos(t)").
+            y_expr: Expression for y in terms of t (e.g., "(1+cos(t))*sin(t)").
+            filename: If provided, save to this file.
+            t_min: Minimum t value (default: 0).
+            t_max: Maximum t value (default: 2*pi).
+            num_points: Number of points to evaluate.
+            title: Plot title.
+
+        Returns:
+            Path to saved file, or empty string if displayed interactively.
+        """
+        try:
+            import matplotlib
+            if filename:
+                matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import numpy as np
+        except ImportError:
+            raise ImportError("matplotlib is required for plotting.")
+
+        t = np.linspace(t_min, t_max, num_points)
+        x_vals = np.array([_eval_expression(x_expr, ti, var="t") for ti in t])
+        y_vals = np.array([_eval_expression(y_expr, ti, var="t") for ti in t])
+
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.plot(x_vals, y_vals, linewidth=1.5, color="blue")
+        ax.set_aspect("equal")
+        ax.grid(True, alpha=0.3)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        if title:
+            ax.set_title(title)
+        else:
+            ax.set_title(f"Parametric: x={x_expr}, y={y_expr}")
+
+        return self._save_or_show(fig, filename)
+
+    def plot_implicit(
+        self,
+        expr_str: str,
+        filename: str = "",
+        x_range: tuple[float, float] = (-5.0, 5.0),
+        y_range: tuple[float, float] = (-5.0, 5.0),
+        resolution: int = 400,
+        title: str = "",
+    ) -> str:
+        """Plot an implicit function f(x,y) = 0 using contour.
+
+        Args:
+            expr_str: Expression in x and y (e.g., "x^2 + y^2 - 1").
+            filename: If provided, save to this file.
+            x_range: Tuple (x_min, x_max).
+            y_range: Tuple (y_min, y_max).
+            resolution: Grid resolution (NxN points).
+            title: Plot title.
+
+        Returns:
+            Path to saved file, or empty string if displayed interactively.
+        """
+        try:
+            import matplotlib
+            if filename:
+                matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import numpy as np
+        except ImportError:
+            raise ImportError("matplotlib is required for plotting.")
+
+        x = np.linspace(x_range[0], x_range[1], resolution)
+        y = np.linspace(y_range[0], y_range[1], resolution)
+        X, Y = np.meshgrid(x, y)
+
+        # Evaluate the expression over the grid
+        Z = np.zeros_like(X)
+        for i in range(resolution):
+            for j in range(resolution):
+                ns = {**_SAFE_MATH_NS, "x": X[i, j], "y": Y[i, j]}
+                expr = expr_str.replace("^", "**")
+                try:
+                    Z[i, j] = float(eval(expr, {"__builtins__": {}}, ns))
+                except Exception:
+                    Z[i, j] = float("nan")
+
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.contour(X, Y, Z, levels=[0], colors="blue", linewidths=2)
+        ax.set_aspect("equal")
+        ax.grid(True, alpha=0.3)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        if title:
+            ax.set_title(title)
+        else:
+            ax.set_title(f"Implicit: {expr_str} = 0")
+
+        return self._save_or_show(fig, filename)
 
     @staticmethod
     def _save_or_show(fig, filename: str) -> str:

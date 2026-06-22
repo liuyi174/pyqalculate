@@ -1,292 +1,213 @@
-"""PyQalculate v2.1.2 - Demo Script"""
+"""PyQalculate Demo - subprocess-based command runner.
+
+Reads commands from scripts/demo_commands.txt, executes each via the
+pyqalc CLI, and writes consolidated output to scripts/demo_output/.
+
+Plot commands (plot, plot_parametric, plot_implicit) are handled via
+the Plotter API since pyqalc does not expose them on the CLI.
+"""
+
+from __future__ import annotations
+
 import os
+import re
+import subprocess
 import sys
-from datetime import datetime
+from pathlib import Path
+from typing import TextIO
 
-# 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
 
-sys.stdout.reconfigure(encoding='utf-8')
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_PROJECT_DIR = _SCRIPT_DIR.parent
+_COMMANDS_FILE = _SCRIPT_DIR / "demo_commands.txt"
+_OUTPUT_DIR = _SCRIPT_DIR / "demo_output"
+_PLOT_DIR = _OUTPUT_DIR / "plots"
+_RESULTS_FILE = _OUTPUT_DIR / "demo_results.txt"
 
-from pyqalculate.calculator import Calculator
-
-def main():
-    calc = Calculator()
-    calc.load_definitions()
-
-    output_dir = 'demo_output'
-    plot_dir = os.path.join(output_dir, 'plots')
-    os.makedirs(plot_dir, exist_ok=True)
-
-    def save_result(filename, content):
-        with open(os.path.join(output_dir, filename), 'w', encoding='utf-8') as f:
-            f.write(content)
-        print(f'  [PASS] {filename}')
-
-    def run_test(name, expression):
-        try:
-            result = calc.calculate_and_print(expression)
-            return f'{expression} = {result}'
-        except Exception as e:
-            return f'{expression} -> ERROR: {e}'
-
-    # 1. 基本运算
-    print('1. 基本运算')
-    basic_tests = [
-        ('基本加法', '2 + 3'),
-        ('乘方', '2^10'),
-        ('平方根', 'sqrt(144)'),
-        ('立方根', 'cbrt(-27)'),
-        ('对数', 'log2(256)'),
-        ('三角函数', 'sin(pi/3)^2 + cos(pi/3)^2'),
-        ('组合数', '20! / (5! * 15!)'),
-        ('GCD', 'gcd(2520, 3600)'),
-        ('LCM', 'lcm(2520, 3600)'),
-    ]
-
-    content = '# 基本运算测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    for name, expr in basic_tests:
-        content += f'## {name}\n'
-        content += run_test(name, expr) + '\n\n'
-    save_result('01_basic_operations.txt', content)
-
-    # 2. 单位转换
-    print('2. 单位转换')
-    unit_tests = [
-        ('速度', '3.5 miles / 12 minutes to km/h'),
-        ('温度', '(98.6 - 32) * 5/9'),
-        ('数据', '1 Gbit/s * 3600 s to GB'),
-        ('压力', '14.7 psi to Pa'),
-        ('长度', '1.74 to ft'),
-        ('能量', '1000 cal to J'),
-        ('力', '100 lbf to N'),
-        ('体积', '1 gallon to L'),
-        ('质量', '1 stone to kg'),
-    ]
-
-    content = '# 单位转换测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    for name, expr in unit_tests:
-        content += f'## {name}\n'
-        content += run_test(name, expr) + '\n\n'
-    save_result('02_unit_conversions.txt', content)
-
-    # 3. 物理常数
-    print('3. 物理常数')
-    constant_tests = [
-        ('光速', 'speed_of_light'),
-        ('普朗克常数', 'planck'),
-        ('玻尔兹曼常数', 'boltzmann'),
-        ('电子质量', 'electron_mass'),
-        ('引力常数', 'newtonian_constant'),
-        ('光子能量', 'planck * speed_of_light / (500 nm) to eV'),
-    ]
-
-    content = '# 物理常数测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    for name, expr in constant_tests:
-        content += f'## {name}\n'
-        content += run_test(name, expr) + '\n\n'
-    save_result('03_physical_constants.txt', content)
-
-    # 4. 代数方程
-    print('4. 代数方程')
-    algebra_tests = [
-        ('一元二次', 'solve(x^2 + 5x + 6 = 0; x)'),
-        ('因式分解', 'factor(x^2 - 4)'),
-        ('展开', 'expand((x+1)^4)'),
-        ('多项式GCD', 'gcd(x^3 - 1; x^2 - 1)'),
-        ('多变量求解', 'multisolve([x+y=5, x-y=1]; [x, y])'),
-    ]
-
-    content = '# 代数方程测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    for name, expr in algebra_tests:
-        content += f'## {name}\n'
-        content += run_test(name, expr) + '\n\n'
-    save_result('04_algebra_equations.txt', content)
-
-    # 5. 微积分
-    print('5. 微积分')
-    calculus_tests = [
-        ('导数', 'diff(x^3 + 2x^2 - x + 1)'),
-        ('二阶导数', 'diff(x^4; x; 2)'),
-        ('不定积分', 'integrate(x^2 * ln(x))'),
-        ('定积分', 'integrate(sin(x)^2; 0; pi)'),
-        ('极限', 'limit(sin(x)/x; 0)'),
-        ('级数', 'sum(1/n^2; 1; 100)'),
-    ]
-
-    content = '# 微积分测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    for name, expr in calculus_tests:
-        content += f'## {name}\n'
-        content += run_test(name, expr) + '\n\n'
-    save_result('05_calculus.txt', content)
-
-    # 6. 矩阵运算
-    print('6. 矩阵运算')
-    matrix_tests = [
-        ('矩阵乘法', '[1 2; 3 4] * [5 6; 7 8]'),
-        ('矩阵求逆', '[2 1; 1 1]^-1'),
-        ('行列式', 'det([1 2 3; 4 5 6; 7 8 9])'),
-        ('转置', 'transpose([1 2 3; 4 5 6])'),
-        ('特征值', 'eigenvalues([4 1; 2 3])'),
-        ('迹', 'trace([1 2 3; 4 5 6; 7 8 9])'),
-    ]
-
-    content = '# 矩阵运算测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    for name, expr in matrix_tests:
-        content += f'## {name}\n'
-        content += run_test(name, expr) + '\n\n'
-    save_result('06_matrices.txt', content)
-
-    # 7. 统计函数
-    print('7. 统计函数')
-    stats_tests = [
-        ('均值', 'mean(12; 15; 18; 22; 25; 30; 35; 40; 42; 48)'),
-        ('标准差', 'stdev(12; 15; 18; 22; 25; 30; 35; 40; 42; 48)'),
-        ('中位数', 'median(12; 15; 18; 22; 25; 30; 35; 40; 42; 48)'),
-        ('正态分布', 'normdist(100; 100; 15)'),
-        ('相关系数', 'correlation([1..10]; [2,4,5,4,5,7,8,9,10,12])'),
-    ]
-
-    content = '# 统计函数测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    for name, expr in stats_tests:
-        content += f'## {name}\n'
-        content += run_test(name, expr) + '\n\n'
-    save_result('07_statistics.txt', content)
-
-    # 8. 进制转换
-    print('8. 进制转换')
-    base_tests = [
-        ('二进制', '42 to bin'),
-        ('八进制', '255 to oct'),
-        ('十六进制', '1024 to hex'),
-        ('所有进制', '255 to bases'),
-        ('罗马数字', '2024 to roman'),
-        ('任意进制', '255 to base 7'),
-        ('浮点表示', '3.14159 to float'),
-    ]
-
-    content = '# 进制转换测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    for name, expr in base_tests:
-        content += f'## {name}\n'
-        content += run_test(name, expr) + '\n\n'
-    save_result('08_number_bases.txt', content)
-
-    # 9. 时间日期
-    print('9. 时间日期')
-    time_tests = [
-        ('时间加法', '10:31 + 8:30 to time'),
-        ('时间格式', '10h 31min + 8h 30min to time'),
-        ('日期差', 'days(2024-01-01; 2024-12-25)'),
-        ('时间戳', 'timestamp(2024-01-01)'),
-    ]
-
-    content = '# 时间日期测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    for name, expr in time_tests:
-        content += f'## {name}\n'
-        content += run_test(name, expr) + '\n\n'
-    save_result('09_time_date.txt', content)
-
-    # 10. 绘图功能
-    print('10. 绘图功能')
-    plot_tests = [
-        ('二次函数', 'x^2', -5, 5),
-        ('正弦函数', 'sin(x)', 0, 6.28),
-        ('余弦函数', 'cos(x)', 0, 6.28),
-        ('指数函数', 'exp(-x)', 0, 5),
-        ('对数函数', 'ln(x)', 0.1, 10),
-        ('心形线', '1 + cos(x)', 0, 6.28),
-        ('阻尼振荡', 'exp(-x/5)*sin(x)', 0, 20),
-    ]
-
-    content = '# 绘图功能测试\n'
-    content += f'# 生成时间: {datetime.now()}\n\n'
-    passed = 0
-    for name, expr, xmin, xmax in plot_tests:
-        fname = f'{name}.png'.replace(' ', '_')
-        path = f"{plot_dir}/{fname}"
-        path = path.replace("\\", "/")
-        result = calc.calculate_and_print(f'plot({expr}, {xmin}, {xmax}, "{path}")')
-        if os.path.exists(path) and os.path.getsize(path) > 0:
-            content += f'## {name}\n'
-            content += f'表达式: {expr}\n'
-            content += f'范围: [{xmin}, {xmax}]\n'
-            content += f'文件: plots/{fname}\n'
-            content += f'大小: {os.path.getsize(path)} bytes\n\n'
-            passed += 1
-            print(f'  [PASS] {name} -> plots/{fname}')
-        else:
-            content += f'## {name}\n'
-            content += f'表达式: {expr}\n'
-            content += f'状态: 失败\n\n'
-            print(f'  [FAIL] {name} failed')
-
-    save_result('10_plots.txt', content)
-
-    # 生成总结报告
-    print()
-    print('生成总结报告...')
-
-    summary = f'''# PyQalculate v2.1.2 功能演示报告
-# 生成时间: {datetime.now()}
-
-## 测试结果总结
-
-| 类别 | 测试数 | 状态 |
-|------|--------|------|
-| 1. 基本运算 | {len(basic_tests)} | [PASS] |
-| 2. 单位转换 | {len(unit_tests)} | [PASS] |
-| 3. 物理常数 | {len(constant_tests)} | [PASS] |
-| 4. 代数方程 | {len(algebra_tests)} | [PASS] |
-| 5. 微积分 | {len(calculus_tests)} | [PASS] |
-| 6. 矩阵运算 | {len(matrix_tests)} | [PASS] |
-| 7. 统计函数 | {len(stats_tests)} | [PASS] |
-| 8. 进制转换 | {len(base_tests)} | [PASS] |
-| 9. 时间日期 | {len(time_tests)} | [PASS] |
-| 10. 绘图功能 | {passed}/{len(plot_tests)} | [PASS] |
-
-## 功能覆盖
-
-- 基本数学运算
-- 单位转换 (573+ 单位)
-- 物理常数
-- 代数方程求解
-- 微积分 (导数、积分、极限)
-- 矩阵运算
-- 统计函数
-- 进制转换
-- 时间日期处理
-- 函数绘图 (matplotlib)
-
-## 输出文件
-
-- 01_basic_operations.txt - 基本运算
-- 02_unit_conversions.txt - 单位转换
-- 03_physical_constants.txt - 物理常数
-- 04_algebra_equations.txt - 代数方程
-- 05_calculus.txt - 微积分
-- 06_matrices.txt - 矩阵运算
-- 07_statistics.txt - 统计函数
-- 08_number_bases.txt - 进制转换
-- 09_time_date.txt - 时间日期
-- 10_plots.txt - 绘图功能
-- plots/ - 绘图输出目录
-'''
-
-    save_result('README.md', summary)
-
-    print()
-    print(f'演示完成！共生成 {len(basic_tests) + len(unit_tests) + len(constant_tests) + len(algebra_tests) + len(calculus_tests) + len(matrix_tests) + len(stats_tests) + len(base_tests) + len(time_tests) + passed} 个测试结果')
-    print(f'输出目录: {output_dir}')
+# Resolve pyqalc executable inside the venv
+_VENV_BIN = _PROJECT_DIR / ".venv" / ("Scripts" if os.name == "nt" else "bin")
+_PYQALC = _VENV_BIN / ("pyqalc.exe" if os.name == "nt" else "pyqalc")
 
 
-if __name__ == '__main__':
+# ---------------------------------------------------------------------------
+# Plot command parsing
+# ---------------------------------------------------------------------------
+
+# plot(expr, filename.png)
+_RE_PLOT = re.compile(r"^plot\((.+),\s*(\S+\.png)\)$")
+
+# plot_parametric(x_expr, y_expr, filename.png)
+_RE_PARAMETRIC = re.compile(
+    r"^plot_parametric\((.+?),\s*(.+?),\s*(\S+\.png)\)$"
+)
+
+# plot_implicit(expr, filename.png)
+_RE_IMPLICIT = re.compile(r"^plot_implicit\((.+?),\s*(\S+\.png)\)$")
+
+
+def _run_plot(expr: str, filename: str, out: TextIO) -> None:
+    """Plot a standard y=f(x) expression."""
+    from pyqalculate.plot import Plotter
+
+    path = str(_PLOT_DIR / filename)
+    plotter = Plotter()
+    result = plotter.plot(expr, filename=path)
+    size = os.path.getsize(result) if result and os.path.exists(result) else 0
+    out.write(f"  -> saved {filename} ({size} bytes)\n")
+    print(f"  [PLOT] {filename} ({size} bytes)")
+
+
+def _run_parametric(x_expr: str, y_expr: str, filename: str, out: TextIO) -> None:
+    """Plot a parametric curve x(t), y(t)."""
+    from pyqalculate.plot import Plotter
+
+    path = str(_PLOT_DIR / filename)
+    plotter = Plotter()
+    result = plotter.plot_parametric(x_expr, y_expr, filename=path)
+    size = os.path.getsize(result) if result and os.path.exists(result) else 0
+    out.write(f"  -> saved {filename} ({size} bytes)\n")
+    print(f"  [PARAMETRIC] {filename} ({size} bytes)")
+
+
+def _run_implicit(expr: str, filename: str, out: TextIO) -> None:
+    """Plot an implicit equation f(x,y) = 0."""
+    from pyqalculate.plot import Plotter
+
+    path = str(_PLOT_DIR / filename)
+    plotter = Plotter()
+    result = plotter.plot_implicit(expr, filename=path)
+    size = os.path.getsize(result) if result and os.path.exists(result) else 0
+    out.write(f"  -> saved {filename} ({size} bytes)\n")
+    print(f"  [IMPLICIT] {filename} ({size} bytes)")
+
+
+# ---------------------------------------------------------------------------
+# CLI subprocess execution
+# ---------------------------------------------------------------------------
+
+
+def _run_cli(expression: str, out: TextIO) -> None:
+    """Execute a single expression via the pyqalc CLI subprocess."""
+    cmd = [str(_PYQALC), "-t", expression]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(_PROJECT_DIR),
+        )
+        output = result.stdout.strip()
+        if output:
+            out.write(f"  {output}\n")
+            print(f"  {output}")
+        if result.returncode != 0 and result.stderr.strip():
+            err = result.stderr.strip()
+            out.write(f"  [stderr] {err}\n")
+            print(f"  [ERR] {err}")
+    except subprocess.TimeoutExpired:
+        out.write("  [TIMEOUT after 30s]\n")
+        print("  [TIMEOUT]")
+    except FileNotFoundError:
+        out.write(f"  [ERROR] pyqalc not found at {_PYQALC}\n")
+        print(f"  [ERROR] pyqalc not found at {_PYQALC}")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    # Ensure output directories exist
+    _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    _PLOT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Read commands
+    if not _COMMANDS_FILE.exists():
+        print(f"Error: commands file not found: {_COMMANDS_FILE}")
+        sys.exit(1)
+
+    lines = _COMMANDS_FILE.read_text(encoding="utf-8").splitlines()
+
+    total = 0
+    plots = 0
+    errors = 0
+
+    with open(_RESULTS_FILE, "w", encoding="utf-8") as out:
+        out.write("PyQalculate Demo Results\n")
+        out.write("=" * 60 + "\n\n")
+
+        for raw_line in lines:
+            line = raw_line.strip()
+
+            # Skip empty lines and comments
+            if not line or line.startswith("#"):
+                # Echo section headers
+                if line.startswith("# =="):
+                    out.write(f"\n{line}\n")
+                    print(f"\n{line}")
+                elif line.startswith("#"):
+                    out.write(f"{line}\n")
+                    print(line)
+                continue
+
+            total += 1
+            out.write(f"\n>> {line}\n")
+            print(f"\n>> {line}")
+
+            # --- plot(expr, file.png) ---
+            m = _RE_PLOT.match(line)
+            if m:
+                try:
+                    _run_plot(m.group(1), m.group(2), out)
+                    plots += 1
+                except Exception as e:
+                    out.write(f"  [PLOT ERROR] {e}\n")
+                    print(f"  [PLOT ERROR] {e}")
+                    errors += 1
+                continue
+
+            # --- plot_parametric(x_expr, y_expr, file.png) ---
+            m = _RE_PARAMETRIC.match(line)
+            if m:
+                try:
+                    _run_parametric(m.group(1), m.group(2), m.group(3), out)
+                    plots += 1
+                except Exception as e:
+                    out.write(f"  [PARAMETRIC ERROR] {e}\n")
+                    print(f"  [PARAMETRIC ERROR] {e}")
+                    errors += 1
+                continue
+
+            # --- plot_implicit(expr, file.png) ---
+            m = _RE_IMPLICIT.match(line)
+            if m:
+                try:
+                    _run_implicit(m.group(1), m.group(2), out)
+                    plots += 1
+                except Exception as e:
+                    out.write(f"  [IMPLICIT ERROR] {e}\n")
+                    print(f"  [IMPLICIT ERROR] {e}")
+                    errors += 1
+                continue
+
+            # --- Regular calculator command via CLI subprocess ---
+            _run_cli(line, out)
+
+        out.write(f"\n{'=' * 60}\n")
+        out.write(f"Total commands: {total}\n")
+        out.write(f"Plots generated: {plots}\n")
+        out.write(f"Errors: {errors}\n")
+
+    print(f"\n{'=' * 60}")
+    print(f"Done! {total} commands, {plots} plots, {errors} errors")
+    print(f"Results: {_RESULTS_FILE}")
+    print(f"Plots:   {_PLOT_DIR}")
+
+
+if __name__ == "__main__":
     main()

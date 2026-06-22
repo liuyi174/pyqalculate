@@ -58,4 +58,5 @@ Thumbs.db
 
 # Output directories
 demo_output/
+scripts/demo_output/
 test_results/
