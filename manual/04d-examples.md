@@ -311,19 +311,22 @@ Special commands:
 
 ## 4d.9 Tab 补全示例
 
-当输入部分命令并按 Tab 时：
+当输入部分命令并按 Tab 时（只有一个匹配项时显示描述）：
 
 ```
 > si<TAB>
   sin - Sine
 
-> co<TAB>
-  cos - Cosh
-  cosh - Cosine
-  correlation - Correlation
+> sqrt<TAB>
+  sqrt - Square root
+```
 
-> solve<TAB>
-  solve - Solve equation
+当有多个匹配项时，按 Tab 会循环显示选项：
+```
+> co<TAB><TAB><TAB>
+  cos
+  cosh
+  correlation
 ```
 
 ---

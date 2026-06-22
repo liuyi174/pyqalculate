@@ -225,7 +225,10 @@ python -m pyqalc
 
 ```
 > assume x > 0
+  Assumptions noted: x > 0
 ```
+
+**注意**: 此命令目前是占位符，仅回显输入，不会实际应用假设。
 
 ### mode
 

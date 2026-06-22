@@ -380,7 +380,7 @@ def _handle_set_command(
             return "approximation = EXACT"
         if v in ("approx", "approximate"):
             eo.approximation = ApproximationMode.APPROXIMATE
-            return "approximation = APPROROXIMATE"
+            return "approximation = APPROXIMATE"
         if v in ("try", "try_exact"):
             eo.approximation = ApproximationMode.TRY_EXACT
             return "approximation = TRY_EXACT"
