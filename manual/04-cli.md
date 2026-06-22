@@ -1,7 +1,7 @@
-# 第4章 命令行界面 (CLI)
+# 第4章 命令行界面 (CLI) - 完整参考
 
 > **验证状态**: ✅ 已验证  
-> **来源**: `pyqalc/cli.py` (602 行)
+> **来源**: `pyqalc/cli.py` (752 行)
 
 ---
 
@@ -30,6 +30,7 @@ start.bat → 选择 [1]
 | `-e` | `--exrates` | 启动时更新汇率 | `cli.py:100-106` |
 | `-v` | `--version` | 显示版本 | `cli.py:107-112` |
 | — | `--no-color` | 禁用彩色输出 | `cli.py:113-118` |
+| `-h` | `--help` | 显示帮助信息 | argparse 自动提供 |
 
 ---
 
@@ -83,6 +84,89 @@ python -m pyqalc
 
 ```
 > help
+```
+
+**新增功能**: `help <function>` 显示函数详细帮助 [来源: cli.py:453-470]
+
+```
+> help sin
+  sin - Sine
+  Category: Trigonometry
+  Syntax: sin(x:number)
+
+> help solve
+  solve - Solve equation
+  Category: Algebra
+  Syntax: solve(equation:symbolic, [variable:symbolic])
+```
+
+### functions
+
+列出所有可用函数 [来源: cli.py:473-475]
+
+```
+> functions
+  Algebra:
+    coeff, degree, dsolve, expand, factor, multisolve, roots, solve
+
+  Base:
+    base, bases, bin, float, floaterror, hex, oct, roman
+
+  Bitwise:
+    bitand, bitnot, bitor, bitxor, shift
+
+  Calculus:
+    diff, integrate, limit, product, sum
+
+  Combinatorics:
+    binomial, double_factorial, factorial, gamma, multinomial
+
+  Date & Time:
+    date, days, lunarphase, months, now, stamptodate, timestamp, today, weeks, years
+
+  Exponents & Logarithms:
+    cbrt, cis, exp, exp10, exp2, lambertw, ln, log10, log2, logn, root, sqrt, square
+
+  Logical:
+    and, not, or, xor
+
+  Matrix:
+    adj, cofactor, cross, det, dot, eigenvalues, hadamard, identity, inverse, magnitude, norm, rank, rref, trace, transpose
+
+  Number Theory:
+    abs, arg, bernoulli, ceil, denominator, floor, frac, gcd, im, int, interval, is_prime, lcm, mod, next_prime, nth_prime, numerator, parallel, powermod, prev_prime, prime_count, re, rem, round, signum, totient, trunc, uncertainty
+
+  Special:
+    airy, besselj, bessely, beta, digamma, dirac, erf, erfc, fresnelc, fresnels, heaviside, zeta
+
+  Statistics:
+    correlation, covariance, max, mean, median, min, mode, normdist, percentile, quartile, rand, stdev, variance
+
+  Trigonometry:
+    acos, acosh, asin, asinh, atan, atan2, atanh, cos, cosh, sin, sinc, sinh, tan, tanh
+
+  Utility:
+    concatenate, even, export, for, genvector, if, is_integer, is_number, is_rational, is_real, length, load, odd, plot, replace, tostring
+```
+
+### constants
+
+列出所有物理常量 [来源: cli.py:477-479]
+
+```
+> constants
+  Physical Constants:
+    alpha = 0.0072973526
+    avogadro = 6.0221408e+23
+    boltzmann = 1.380649e-23
+    c = 299792458
+    e = 2.7182818
+    e_charge = 1.6021766e-19
+    elementary_charge = 1.6021766e-19
+    g = 6.6743e-11
+    k_b = 1.380649e-23
+    n_a = 6.0221408e+23
+    ... and 54 more
 ```
 
 ### set
@@ -202,6 +286,13 @@ python -m pyqalc
 - 变量名（如 `pi`, `e`）
 - 单位名（如 `m`, `kg`, `ft`）
 - 元命令（如 `set`, `help`, `mode`）
+
+**增强功能**: 当只有一个匹配项时，显示函数描述 [来源: cli.py:214-232]
+
+```
+> sin<TAB>
+  sin - Sine
+```
 
 ---
 

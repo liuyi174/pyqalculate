@@ -162,11 +162,56 @@ def _make_completer(calc: Calculator) -> list[str]:
     words.extend([
         "set", "save", "delete", "assume", "base", "mode",
         "help", "quit", "exit", "factorize", "simplify",
+        "functions", "constants",
     ])
     return words
 
 
-def _install_completer(words: list[str]) -> None:
+def _get_completion_description(word: str, calc: Calculator) -> str:
+    """Get a short description for a completion word."""
+    # Check if it's a function
+    func = calc.get_function(word)
+    if func:
+        title = func.title()
+        args = func.min_args()
+        max_args = func.max_args()
+        if max_args > args:
+            return f"{title} ({args}-{max_args} args)"
+        elif args > 0:
+            return f"{title} ({args} args)"
+        else:
+            return title
+
+    # Check if it's a variable
+    var = calc.get_variable(word)
+    if var:
+        return var.title() or "variable"
+
+    # Check if it's a unit
+    unit = calc.get_unit(word)
+    if unit:
+        return unit.title() or "unit"
+
+    # Built-in commands
+    cmd_descs = {
+        "set": "Show/set options",
+        "save": "Save a variable",
+        "delete": "Delete a variable",
+        "assume": "Set assumptions",
+        "base": "Change output base",
+        "mode": "Change calculation mode",
+        "help": "Show help",
+        "quit": "Exit program",
+        "exit": "Exit program",
+        "factorize": "Factorize last result",
+        "simplify": "Simplify last result",
+        "functions": "List all functions",
+        "constants": "List all constants",
+    }
+    return cmd_descs.get(word, "")
+
+
+def _install_completer(words: list[str], calc: Calculator) -> None:
     """Install a readline tab-completer using *words*."""
     try:
         import readline  # noqa: F811
@@ -174,6 +219,12 @@ def _install_completer(words: list[str]) -> None:
         def completer(text: str, state: int) -> str | None:
             options = [w for w in words if w.startswith(text.lower())]
             if state < len(options):
+                word = options[state]
+                # Show description on second tab press
+                if state == 0 and len(options) == 1:
+                    desc = _get_completion_description(word, calc)
+                    if desc:
+                        print(f"\n  {word} - {desc}")
                 return options[state]
             return None
 
@@ -200,9 +251,90 @@ Special commands:
   mode [mode_name]         Show/change calculation mode
   factorize                Factorize last result
   simplify                 Simplify last result
-  help                     Show this help message
+  help [function]          Show help for a function (e.g. help sin)
+  functions                List all available functions
+  constants                List all physical constants
   quit / exit              Exit the program
 """
+
+
+def _handle_help_function(func_name: str, calc: Calculator) -> str | None:
+    """Show help for a specific function."""
+    func = calc.get_function(func_name)
+    if func is None:
+        return f"Error: unknown function '{func_name}'"
+
+    lines = []
+    lines.append(f"  {func.name()} - {func.title()}")
+    lines.append(f"  Category: {func.category()}")
+
+    # Build argument signature
+    min_a = func.min_args()
+    max_a = func.max_args()
+    arg_parts = []
+    for i in range(max_a if max_a > 0 else min_a):
+        arg_def = func.get_argument_definition(i)
+        if arg_def:
+            arg_name = arg_def.name() or f"arg{i+1}"
+            arg_type = arg_def.print_short()
+            if i >= min_a:
+                arg_parts.append(f"[{arg_name}:{arg_type}]")
+            else:
+                arg_parts.append(f"{arg_name}:{arg_type}")
+        else:
+            arg_parts.append(f"arg{i+1}")
+
+    if arg_parts:
+        lines.append(f"  Syntax: {func.name()}({', '.join(arg_parts)})")
+    else:
+        lines.append(f"  Syntax: {func.name()}()")
+
+    if func.description():
+        lines.append(f"  Description: {func.description()}")
+
+    if func.example():
+        lines.append(f"  Example: {func.example()}")
+
+    return "\n".join(lines)
+
+
+def _list_functions_by_category(calc: Calculator) -> str:
+    """List all functions organized by category."""
+    categories: dict[str, list[str]] = {}
+    for name, func in calc._functions.items():
+        cat = func.category() or "Other"
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(name)
+
+    lines = []
+    for cat in sorted(categories.keys()):
+        funcs = sorted(categories[cat])
+        lines.append(f"\n  {cat}:")
+        lines.append(f"    {', '.join(funcs)}")
+
+    return "\n".join(lines)
+
+
+def _list_constants(calc: Calculator) -> str:
+    """List all physical constants."""
+    from pyqalculate.variable import KnownVariable
+    constants = []
+    for name, var in calc._variables.items():
+        if isinstance(var, KnownVariable):
+            try:
+                val = var.get()
+                if val is not None:
+                    constants.append((name, str(val)))
+            except:
+                pass
+
+    lines = ["  Physical Constants:"]
+    for name, val in sorted(constants)[:50]:  # Show first 50
+        lines.append(f"    {name} = {val}")
+    if len(constants) > 50:
+        lines.append(f"    ... and {len(constants) - 50} more")
+    return "\n".join(lines)
 
 
 def _handle_set_command(
@@ -419,7 +551,7 @@ def interactive_mode(
 
     _COMPLETER_WORDS = _make_completer(calc)
     _setup_readline()
-    _install_completer(_COMPLETER_WORDS)
+    _install_completer(_COMPLETER_WORDS, calc)
 
     print(_bold(f"PyQalculate {VERSION}"))
     print("Type 'help' for help, 'quit' to exit.\n")
@@ -457,6 +589,25 @@ def interactive_mode(
         parts = line.split()
         cmd = parts[0].lower()
         cmd_args = parts[1:]
+
+        if cmd == "help":
+            if cmd_args:
+                # Help for specific function
+                func_name = cmd_args[0].lower()
+                msg = _handle_help_function(func_name, calc)
+                if msg:
+                    print(msg)
+            else:
+                print(HELP_TEXT.format(version=VERSION))
+            continue
+
+        if cmd == "functions":
+            print(_list_functions_by_category(calc))
+            continue
+
+        if cmd == "constants":
+            print(_list_constants(calc))
+            continue
 
         if cmd == "set":
             msg = _handle_set_command(cmd_args, po, eo, calc)
