@@ -1,20 +1,36 @@
-"""PyQalculate Demo - subprocess-based command runner.
+"""PyQalculate Demo - Calculator API-based command runner.
 
 Reads commands from scripts/demo_commands.txt, executes each via the
-pyqalc CLI, and writes consolidated output to scripts/demo_output/.
+Calculator API (for stateful settings), and writes consolidated output
+to scripts/demo_output/.
 
-Plot commands (plot, plot_parametric, plot_implicit) are handled via
-the Plotter API since pyqalc does not expose them on the CLI.
+Meta-commands (set, help, mode) are handled programmatically via the
+CLI's handler functions. Math expressions use calculate_and_print().
+Plot commands use the Plotter API.
 """
 
 from __future__ import annotations
 
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import TextIO
+
+from pyqalculate import Calculator
+from pyqalculate.types import (
+    AngleUnit,
+    ApproximationMode,
+    EvaluationOptions,
+    PrintOptions,
+)
+
+# Import CLI meta-command handlers
+from pyqalc.cli import (
+    _handle_set_command,
+    _handle_mode_command,
+    _handle_base_command,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -27,9 +43,18 @@ _OUTPUT_DIR = _SCRIPT_DIR / "demo_output"
 _PLOT_DIR = _OUTPUT_DIR / "plots"
 _RESULTS_FILE = _OUTPUT_DIR / "demo_results.txt"
 
-# Resolve pyqalc executable inside the venv
-_VENV_BIN = _PROJECT_DIR / ".venv" / ("Scripts" if os.name == "nt" else "bin")
-_PYQALC = _VENV_BIN / ("pyqalc.exe" if os.name == "nt" else "pyqalc")
+
+# ---------------------------------------------------------------------------
+# Meta-command detection
+# ---------------------------------------------------------------------------
+
+META_COMMANDS = frozenset({"set", "help", "mode", "base"})
+
+
+def _is_meta_command(line: str) -> bool:
+    """Check if line starts with a meta-command keyword."""
+    parts = line.split()
+    return bool(parts) and parts[0].lower() in META_COMMANDS
 
 
 # ---------------------------------------------------------------------------
@@ -85,35 +110,117 @@ def _run_implicit(expr: str, filename: str, out: TextIO) -> None:
 
 
 # ---------------------------------------------------------------------------
-# CLI subprocess execution
+# Meta-command handling
 # ---------------------------------------------------------------------------
 
 
-def _run_cli(expression: str, out: TextIO) -> None:
-    """Execute a single expression via the pyqalc CLI subprocess."""
-    cmd = [str(_PYQALC), "-t", expression]
+def _handle_help(out: TextIO) -> None:
+    """Print demo help text."""
+    lines = [
+        "  PyQalculate Demo Help:",
+        "  - Type expressions to evaluate (e.g., 2+2, sin(pi/2))",
+        "  - Use 'set precision N' to set decimal precision",
+        "  - Use 'set base N' to set number base (2-36)",
+        "  - Use 'set angle degree|radian' to set angle unit",
+        "  - Use 'set approx exact|approximate|try_exact' to set mode",
+        "  - Use 'mode' to show current settings",
+    ]
+    for line in lines:
+        out.write(f"{line}\n")
+        print(line)
+
+
+def _run_meta_command(
+    line: str,
+    calc: Calculator,
+    po: PrintOptions,
+    eo: EvaluationOptions,
+    out: TextIO,
+) -> None:
+    """Handle a meta-command programmatically."""
+    parts = line.split()
+    cmd = parts[0].lower()
+    args = parts[1:]
+
+    if cmd == "help":
+        _handle_help(out)
+        return
+
+    if cmd == "set":
+        # Intercept 'set angle' since CLI handler doesn't support it
+        if len(args) >= 2 and args[0].lower() == "angle":
+            angle_str = args[1].lower()
+            if angle_str == "radian":
+                eo.parse_options.angle_unit = AngleUnit.RADIANS
+            elif angle_str == "degree":
+                eo.parse_options.angle_unit = AngleUnit.DEGREES
+            elif angle_str == "gradian":
+                eo.parse_options.angle_unit = AngleUnit.GRADIANS
+            else:
+                eo.parse_options.angle_unit = AngleUnit.NONE
+            msg = f"  angle unit = {angle_str}"
+            out.write(f"{msg}\n")
+            print(msg)
+            return
+
+        # Intercept 'set precision' to also set max_decimals for output
+        if len(args) >= 2 and args[0].lower() == "precision":
+            try:
+                n = int(args[1])
+                calc.set_precision(n)
+                po.max_decimals = n
+                msg = f"  precision = {n}"
+                out.write(f"{msg}\n")
+                print(msg)
+            except ValueError:
+                msg = "  Error: precision must be an integer"
+                out.write(f"{msg}\n")
+                print(msg)
+            return
+
+        # Delegate other set commands to CLI handler
+        msg = _handle_set_command(args, po, eo, calc)
+        if msg:
+            out.write(f"  {msg}\n")
+            print(f"  {msg}")
+        return
+
+    if cmd == "mode":
+        msg = _handle_mode_command(args, po, eo)
+        if msg:
+            out.write(f"  {msg}\n")
+            print(f"  {msg}")
+        return
+
+    if cmd == "base":
+        msg = _handle_base_command(args, po)
+        if msg:
+            out.write(f"  {msg}\n")
+            print(f"  {msg}")
+        return
+
+
+# ---------------------------------------------------------------------------
+# Math expression evaluation
+# ---------------------------------------------------------------------------
+
+
+def _run_expression(
+    expr: str,
+    calc: Calculator,
+    po: PrintOptions,
+    eo: EvaluationOptions,
+    out: TextIO,
+) -> None:
+    """Evaluate a math expression via the Calculator API."""
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=str(_PROJECT_DIR),
-        )
-        output = result.stdout.strip()
-        if output:
-            out.write(f"  {output}\n")
-            print(f"  {output}")
-        if result.returncode != 0 and result.stderr.strip():
-            err = result.stderr.strip()
-            out.write(f"  [stderr] {err}\n")
-            print(f"  [ERR] {err}")
-    except subprocess.TimeoutExpired:
-        out.write("  [TIMEOUT after 30s]\n")
-        print("  [TIMEOUT]")
-    except FileNotFoundError:
-        out.write(f"  [ERROR] pyqalc not found at {_PYQALC}\n")
-        print(f"  [ERROR] pyqalc not found at {_PYQALC}")
+        result = calc.calculate_and_print(expr, eo=eo, po=po)
+        if result:
+            out.write(f"  {result}\n")
+            print(f"  {result}")
+    except Exception as e:
+        out.write(f"  [ERROR] {e}\n")
+        print(f"  [ERROR] {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +239,18 @@ def main() -> None:
         sys.exit(1)
 
     lines = _COMMANDS_FILE.read_text(encoding="utf-8").splitlines()
+
+    # Initialize Calculator with definitions
+    calc = Calculator()
+    calc.load_definitions()
+    try:
+        calc.load_global_definitions()
+    except Exception:
+        pass  # non-fatal
+
+    # Shared print/eval options (stateful across commands)
+    po = PrintOptions()
+    eo = EvaluationOptions()
 
     total = 0
     plots = 0
@@ -158,6 +277,16 @@ def main() -> None:
             total += 1
             out.write(f"\n>> {line}\n")
             print(f"\n>> {line}")
+
+            # --- Meta-commands (set, help, mode, base) ---
+            if _is_meta_command(line):
+                try:
+                    _run_meta_command(line, calc, po, eo, out)
+                except Exception as e:
+                    out.write(f"  [META ERROR] {e}\n")
+                    print(f"  [META ERROR] {e}")
+                    errors += 1
+                continue
 
             # --- plot(expr, file.png) ---
             m = _RE_PLOT.match(line)
@@ -195,8 +324,8 @@ def main() -> None:
                     errors += 1
                 continue
 
-            # --- Regular calculator command via CLI subprocess ---
-            _run_cli(line, out)
+            # --- Regular math expression via Calculator API ---
+            _run_expression(line, calc, po, eo, out)
 
         out.write(f"\n{'=' * 60}\n")
         out.write(f"Total commands: {total}\n")
